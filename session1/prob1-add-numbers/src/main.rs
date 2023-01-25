@@ -12,7 +12,7 @@ fn main() -> std::io::Result<()> {
         // println!("Filename is {}", filename);
         let fd = File::open(filename)?;
         let buf = BufReader::new(fd);
-        let mut i = 0;
+        // let mut i = 0;
         let mut total = 0;
         for line in buf.lines() {
             match line {
@@ -28,7 +28,7 @@ fn main() -> std::io::Result<()> {
                     println!("{:?}", e)
                 }
             }
-            i += 1;
+            // i += 1;
         }
         println!("Total is {}", total);
     } else {
