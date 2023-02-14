@@ -1,0 +1,190 @@
+Session 2 homework
+==================
+
+As last time, the first part will be practice for what we've looked at this week
+while part two will be building up the work toward a BF interpreter.
+
+This homework block is much larger and more complex than the first set of
+homework so please don't wait to get started. The sooner you try, the sooner you
+can ask should you encounter any issues. Again, you have a week to try your
+homework, and then bring questions to our recap session. Then a week to finish
+your homework before you need to "hand it in" to me, ideally a day, but at least
+the morning before our next session.
+
+Part 1 - Practice for structs and enumerations
+----------------------------------------------
+
+For this homework task you do not have complete control over the data structures
+since I want you to practice certain things so I'm guiding the code design
+a little.  It'll not be glorious, but you will get practice.  As such, work very
+carefully through this section.  I really want you to *understand* what it is
+that you have done by the end of this question.  Please find me, ask questions
+over lunch, show me your code if it's not working, and we can discuss it.  This
+is your first really big task, and it's important that you get it *just right*.
+
+If you get stuck, go back to the beginning and check that you've followed all of
+the steps I wrote out.  It may even help you to make a commit after each little
+part so that you can look back on the diffs when you're thinking "Did I actually
+do everything asked of me at this step?"
+
+This is a big part 1 but you'll have learned a lot ready for part 2.
+
+You will have input in the following form (without the indentations):
+
+    Harry:9
+    Susan:4
+    Gregory:3
+    Ulrika:10
+    Daniel Silverstone:9
+    Fred Jones:10
+    Harry:4
+    Susan
+    Gregory:7
+    Ulrika:9
+    Daniel Silverstone:7
+    Fred Jones:7
+    Harry:6
+    Susan:6
+    Gregory:9
+    Ulrika:10
+    Daniel Silverstone
+    Fred Jones:4
+    Harry:7
+    Susan:9
+    Gregory:8
+    Ulrika:7
+    Daniel Silverstone:10
+    Fred Jones
+
+I would like you to define a enum to represent a line. It should have two
+variants. One for the form "name:number" and one for the form "name". Call the
+first variant `NameAndNumber` and the other `NameOnly` and ensure that they
+contain the relevant data.
+
+I want you to implement `std::convert::TryFrom` for your enumeration, converting
+from either `&str`, or `&String`.
+
+Remember you can bring the trait into scope with `use std::convert::TryFrom` and
+then you simply need to `impl TryFrom<&str> for WhateverYouCalledYourEnumeration {…}`.
+
+You should be able to parse the "name:number" form into a string and a number
+of some type.  I'll be perfectly happy if the error type you associate to your
+`TryFrom` implementation is `Box<dyn std::error::Error>` but also quite happy
+if you'd prefer to `format!()` your error message and have your error type be
+a `String`.  At this time _do not_ write another enumeration for your errors.
+
+Next, I'd like for you to write a function which takes a filename and returns
+a `Result<Vec<EnumName>, Box<dyn std::error::Error>>`. This function should open,
+and read the file (whichever approach you prefer) and then convert the lines
+into those `EnumName` instances using the `TryFrom` implementation above,
+returning a vector.  It should stop on the first error, returning that, rather
+than trying to continue.  Remember to look at `.collect()`ing into a
+`Result<Vec<_>, _>` - it is possible thanks to `Iterator` being lazy.
+
+At this point, I'd like you to print out the result of parsing your input by
+means of `println!("{:?}", thatvector);` to demonstrate that you've parsed
+your input usefully.  Do this from your main() function which will therefore
+also need to return an error result in order to allow you to use the `?` operator.
+Also remember that you'll need to `#[derive(Debug)]` for your enum to make this possible.
+
+At this point look over your code.  Ensure there are no `.unwrap()` or `.expect()`
+calls.  All your errors should be percolated up and out of the `main()` function
+appropriately.
+
+Make a commit now, so that I'll be able to refer back to this version of your
+code.
+
+Next I'd like you to define a struct to represent scores.  Each input line is,
+in fact, a score from a test.  I'm not telling you if small numbers are good
+or bad, they are simply scores.  I want your struct to contain a number of
+fields: a running total of all the scores you've seen, and a count of those
+scores. If a line lacks a score, then it means that person didn't take the test
+and you should not count a score for that line.  Instead you should count it
+as a missed test, making a third field for your struct to store.
+
+I will want this struct to have an implementation of `std::default::Default`
+and for you to use this instead of writing a `ScoreStruct::new` function which
+takes no arguments.
+
+You'll want some nice methods for that struct such as `add_score` or `missed_test`
+along with nice accessor methods for the values in the struct.
+
+Finally I'd like you to use `HashMap` to map from a person's name to an
+accumulation of their scores.  Ideally you should be using the `Entry` API on
+the map to make your code nicer.  Your map will need a type along the lines
+of `HashMap<String, ScoreStruct>`.
+
+Ensure you can print the `HashMap` using `println!("{:?}", fullmap);`
+
+Make a commit here, so I can refer back to this version of your code.
+
+Finally, demonstrate the full scores by iterating through the map, outputting
+lines such as:
+
+    Daniel Silverstone took N tests, with a total score of M.  They missed F tests.
+
+Ensure that you output `test` vs `tests` with respect to pluralisation like we did
+in the ten green bottles program.  It might be nice if this were done as an
+implementation of `std::fmt::Display` on the score structure, allowing a statement
+of the form: `println!("{} took {}", hashkey, hashvalue);` to be the core of the
+iteration loop over the hash map.
+
+Phew, that was a long one.  Take a moment to go back over your code, add comments
+if you feel anything isn't entirely clear, and clean things up before you make
+a final commit ready for next session.
+
+Part 2 - Another step toward an interpreter
+===========================================
+
+We're going to begin developing a BF interpreter soon.  As such let's do some
+work toward representing the program usefully.
+
+Using the same input as you had from the first week, we're going to build an
+intermediate representation of the program.
+
+First up, please write an `enum` for BF instructions.  Remember that there are
+eight possible instruction characters.  These are probably *raw* instructions
+since we'll later want to do something clever for the loops, so name your enum
+appropriately.  The eagle-eyed among you may have noticed some help for this in
+the session's example slide about unit-kind enumerations.
+
+Implement an associated function `RawInstruction::from_char` which returns
+an `Option<RawInstruction>` which is `None` if the input character isn't a valid
+raw BF instruction.
+
+You *may* if you prefer, do all the above with `u8` rather than `char` given that
+nominally BF always deals with bytes.  That is up to you.  For now `char` is likely
+to be easier to work with, and since we're not performance sensitive, I don't mind.
+
+Next, I would like a struct to represent each input instruction, using the
+`RawInstruction` enumeration from above, and also two `usize` values to
+represent the line number and character column of the instruction.
+
+Please write a function like in part 1 which takes a filename and returns a
+`Result<Vec<InstructionWithPositionOrWhatever>, Box<dyn std::error::Error>>`.
+
+Use a debugging `println!` to ensure the parsed data is useful.
+
+Commit this so that I can refer back to it.
+
+Now let's get to the last part of the task…
+
+What I'd like as the final output of this program is something akin to:
+
+    [inputfile:8:4] Increment current location
+    [inputfile:8:5] Start looping
+    [inputfile:8:6] Decrement current location
+    ...
+
+This might require you to add a `Display` implementation for your `RawInstruction`
+and appropriate methods on your struct to get hold of the line and column numbers.
+Also make sure you give human numbering for lines and columns - humans count from
+one, not zero.
+
+As you implement this last part you may come across an error along the lines of:
+"cannot move out of borrowed context" when implementing your accessor method
+for the `RawInstruction`.  If you do, you might find the `Clone` and `Copy`
+traits useful to derive on your nice simple enumeration.
+
+Test your program using the input from last week.  The above output is from the
+start of that.  Once you have it all working, make a commit.

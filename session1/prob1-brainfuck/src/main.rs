@@ -39,14 +39,16 @@ fn main() -> std::io::Result<()> {
             // i += 1;
         }
         // println!("File content is {:?}", content);
-        let valid_chars = vec!['>', '<', '+', '-', '.', ',', '[', ']'];
+
+        let valid_chars = "><+-.,[]";
         let mut program = String::new();
         for ch in content {
-            if valid_chars.iter().any(|v: &char| v == &ch) {
+            if valid_chars.contains(ch) {
                 program.push(ch);
             }
         }
-        println!("Brainfuck program is {:?}", program);
+
+        println!("Brainfuck program is \"{}\"", program);
     } else {
         println!("You didn't specify a file");
     }
