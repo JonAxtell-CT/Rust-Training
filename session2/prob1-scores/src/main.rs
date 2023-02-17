@@ -140,6 +140,13 @@ impl std::default::Default for Scores {
     }
 }
 
+fn pluralize<T: num::Integer>(value: T) -> String {
+    if value.is_one() {
+        "".to_string()
+    } else {
+        "s".to_string()
+    }
+}
 /*
  * Pretty printing of the scores on the doors.
  * To be used in output such as println!("{} took {}", name, score)
@@ -153,7 +160,7 @@ impl fmt::Display for Scores {
             f,
             "{} test{}, with a total score of {}",
             self.get_tests_taken(),
-            if self.get_tests_taken() != 1 { "s" } else { "" },
+            pluralize(self.get_tests_taken()),
             self.get_total_score()
         )?;
         if self.get_missed_tests() > 0 {
@@ -161,11 +168,7 @@ impl fmt::Display for Scores {
                 f,
                 ", and they missed {} test{}",
                 self.get_missed_tests(),
-                if self.get_missed_tests() != 1 {
-                    "s"
-                } else {
-                    ""
-                }
+                pluralize(self.get_missed_tests()),
             )?;
         };
         Ok(())
@@ -179,19 +182,13 @@ impl fmt::Display for Scores {
 fn parse_score_file(filename: String) -> Result<Vec<Lines>, Box<dyn std::error::Error>> {
     // println!("Filename is {}", filename);
 
-    let fd = File::open(&filename);
-    if fd.is_err() {
-        return Err(format!("Could not open file '{}'", &filename).into());
-    }
-    let fd = fd?;
+    let fd = File::open(&filename).map_err(|e| format!("Could not open file '{filename}': {e}"))?;
     let buf = BufReader::new(fd);
     let mut lines = Vec::<Lines>::new();
     let mut i = 1;
     for line in buf.lines() {
-        if line.is_err() {
-            return Err(format!("Problem reading from file '{}' at line {}", &filename, i).into());
-        }
-        let line = line?;
+        let line =
+            line.map_err(|e| format!("Problem reading from file '{filename}' at line {i}': {e}"))?;
         let e = Lines::try_from(&line)?;
         lines.push(e);
         i += 1;
@@ -207,72 +204,66 @@ fn parse_score_file(filename: String) -> Result<Vec<Lines>, Box<dyn std::error::
  * not counted as a zero score.
  */
 fn main() -> Result<(), Box<dyn Error>> {
-    let args: Vec<String> = env::args().collect();
+    let filename = env::args().nth(1).ok_or("You didn't specify a file")?;
 
-    if args.len() > 1 {
-        let filename = &args[1];
+    // Parse the text file into structures in memory
+    let lines = parse_score_file(filename.to_string())?;
 
-        // Parse the text file into structures in memory
-        let lines = parse_score_file(filename.to_string())?;
-
-        // Dump out the result of the processing of the text file
-        if cfg!(debug_assertions) {
-            println!("Lines from the score file");
-            for line in lines.iter() {
-                println!("{:?}", line);
-            }
-            println!("Score file as an iterator");
-            println!("{:?}", lines.iter()); // Debug output (concise)
-            println!("{:#?}", lines.iter()); // Pretty debug output (verbose)
-            println!("Count: {}", lines.len());
-        }
-
-        // Do some processing of the text file to get some totals
-        let mut scores = Scores::default();
+    // Dump out the result of the processing of the text file
+    if cfg!(debug_assertions) {
+        println!("Lines from the score file");
         for line in lines.iter() {
-            match line {
-                Lines::NN(nn) => {
-                    scores.add_score(nn.score);
-                }
-                Lines::NO(_no) => {
-                    scores.missed_test();
-                }
+            println!("{:?}", line);
+        }
+        println!("Score file as an iterator");
+        println!("{:?}", lines.iter()); // Debug output (concise)
+        println!("{:#?}", lines.iter()); // Pretty debug output (verbose)
+        println!("Count: {}", lines.len());
+    }
+
+    // Do some processing of the text file to get some totals
+    let mut scores = Scores::default();
+    for line in lines.iter() {
+        match line {
+            Lines::NN(nn) => {
+                scores.add_score(nn.score);
+            }
+            Lines::NO(_no) => {
+                scores.missed_test();
             }
         }
-        println!(
-            "Scores: Total={}, Count={}, Missed={}",
-            scores.get_total_score(),
-            scores.get_tests_taken(),
-            scores.get_missed_tests()
-        );
+    }
+    println!(
+        "Scores: Total={}, Count={}, Missed={}",
+        scores.get_total_score(),
+        scores.get_tests_taken(),
+        scores.get_missed_tests()
+    );
 
-        // Build a hash map of the people in the scores file to get some stats, handling
-        // those with no score who missed tests and those with scores
-        let mut hm = HashMap::<String, Scores>::new();
-        for line in lines.iter() {
-            match line {
-                Lines::NN(n_a_n) => {
-                    hm.entry(n_a_n.get_name().to_string())
-                        .or_insert(Scores::default())
-                        .add_score(n_a_n.get_score());
-                }
-                Lines::NO(no) => {
-                    hm.entry(no.get_name().to_string())
-                        .or_insert(Scores::default())
-                        .missed_test();
-                }
+    // Build a hash map of the people in the scores file to get some stats, handling
+    // those with no score who missed tests and those with scores
+    let mut hm: HashMap<String, Scores> = HashMap::new();
+    for line in lines.iter() {
+        match line {
+            Lines::NN(n_a_n) => {
+                hm.entry(n_a_n.get_name().to_string())
+                    .or_default()
+                    .add_score(n_a_n.get_score());
+            }
+            Lines::NO(no) => {
+                hm.entry(no.get_name().to_string())
+                    .or_default()
+                    .missed_test();
             }
         }
+    }
 
-        #[cfg(debug_assertions)]
-        println!("Hash={:?}", hm);
+    #[cfg(debug_assertions)]
+    println!("Hash={:?}", hm);
 
-        // Output the information gathered from the scores file in a nice human readable manner
-        for (n, s) in hm.iter() {
-            println!("{} took {}", n, s);
-        }
-    } else {
-        println!("You didn't specify a file");
+    // Output the information gathered from the scores file in a nice human readable manner
+    for (n, s) in hm.iter() {
+        println!("{} took {}", n, s);
     }
     Ok(())
 }
