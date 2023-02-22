@@ -121,8 +121,7 @@ impl fmt::Debug for BfInstruction {
 }
 
 /*
- * Parse the scores file and collect all the lines into one of two different
- * structures within a enum and return a vector containing everything
+ * Parse the brain fuck source file and store all the valid commands in a vector
  */
 fn parse_bf_file(filename: String) -> Result<Vec<BfInstruction>, Box<dyn std::error::Error>> {
     let fd = File::open(&filename).map_err(|e| format!("Could not open file '{filename}': {e}"))?;
