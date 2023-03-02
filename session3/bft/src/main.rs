@@ -1,32 +1,34 @@
-#[allow(unused_imports)]
 use std::env;
-use std::error::Error;
-//use std::fmt;
-// use std::fmt::Debug;
-// use std::fs::File;
-// use std::io::BufRead;
-// use std::io::BufReader;
-// use std::path::Path;
 
-use bft_types;
+#[allow(dead_code)]
+const DEBUG: bool = true; // Set to true to enable debugging code
 
-fn main() -> Result<(), Box<dyn Error>> {
-    // let mut program = bft_types::BfProgram {
-    //     filename: env::args().nth(1).ok_or("You didn't specify a file")?,
-    //     instructions: Vec::<bft_types::BfInstruction>::new(),
-    // };
-    let instructions =
+/// Program to read a Brain Fuck program and run it
+/// Usage:
+///     bft <filename.bf>
+///
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let program =
         bft_types::BfProgram::from_file(&env::args().nth(1).ok_or("You didn't specify a file")?)?;
-    // program.instructions = parse_bf_file(&program.filename.to_string())?;
 
-    for inst in &instructions {
-        // println!("{:?}", inst);
-        println!(
-            "{} {} {}",
-            inst.line_no(),
-            inst.char_pos(),
-            bft_types::BfCommands::to_string(inst.command())
-        );
+    if DEBUG {
+        // Debug code to dump BF program.
+        for inst in program.instructions() {
+            // println!("{:?}", inst);
+            println!(
+                "[{}]: {} {} {}",
+                program.filename().to_string_lossy(),
+                inst.line_no(),
+                inst.char_pos(),
+                inst.command(),
+            );
+        }
     }
+
+    // Create a tape for the program to be used by the interpreter
+    let tape: bft_interp::BfTape<u8> =
+        bft_interp::BfTape::new(30000, bft_interp::AllocStrategy::TapeIsFixed);
+    tape.interpreter(&program);
+
     Ok(())
 }
