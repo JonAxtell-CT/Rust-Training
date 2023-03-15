@@ -4,77 +4,74 @@ use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 
-#[allow(dead_code)]
-const DEBUG: bool = false; // Set to true to enable debugging code
-
 /// Brain Fuck commands
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub enum BfCommands {
-    /// Increment data pointer
+pub enum BfCommand {
+    /// Increment the data pointer (to point to the next cell to the right).
     IncDataPointer,
-    /// Decrement data pointer
+    /// Decrement the data pointer (to point to the next cell to the left).
     DecDataPointer,
-    /// Increment byte
+    /// Increment (increase by one) the byte at the data pointer.
     IncValue,
-    /// Decrement byte
+    /// Decrement (decrease by one) the byte at the data pointer.
     DecValue,
-    /// Output byte
+    /// Output the byte at the data pointer.
     OutputValue,
-    /// Input byte
+    /// Accept one byte of input, storing its value in the byte at the data pointer.
     InputValue,
-    /// Jump forward if value is zero
+    /// If the byte at the data pointer is zero, then instead of moving the instruction pointer forward to the next command, jump it forward to the command after the matching ] command.
     JumpForward,
-    /// Jump back if value is non-zero
+    /// If the byte at the data pointer is nonzero, then instead of moving the instruction pointer forward to the next command, jump it back to the command after the matching [ command.
     JumpBackward,
 }
 
 /*
  * Implementation details for Brain Fuck commands
  */
-impl BfCommands {
+impl BfCommand {
     /// Connvert a character to a BF command. An option is returned which
     /// will be none if the character is not a valid BF command.
-    pub fn from_char(ch: char) -> Option<BfCommands> {
+    pub fn from_char(ch: char) -> Option<BfCommand> {
         match ch {
-            '>' => Some(BfCommands::IncDataPointer),
-            '<' => Some(BfCommands::DecDataPointer),
-            '+' => Some(BfCommands::IncValue),
-            '-' => Some(BfCommands::DecValue),
-            '.' => Some(BfCommands::OutputValue),
-            ',' => Some(BfCommands::InputValue),
-            '[' => Some(BfCommands::JumpForward),
-            ']' => Some(BfCommands::JumpBackward),
+            '>' => Some(BfCommand::IncDataPointer),
+            '<' => Some(BfCommand::DecDataPointer),
+            '+' => Some(BfCommand::IncValue),
+            '-' => Some(BfCommand::DecValue),
+            '.' => Some(BfCommand::OutputValue),
+            ',' => Some(BfCommand::InputValue),
+            '[' => Some(BfCommand::JumpForward),
+            ']' => Some(BfCommand::JumpBackward),
             _ => None,
         }
     }
 
     /// Convert a command back to a char if outputting the program
-    pub fn to_char(cmd: BfCommands) -> char {
+    pub fn to_char(cmd: BfCommand) -> char {
         match cmd {
-            BfCommands::IncDataPointer => '>',
-            BfCommands::DecDataPointer => '<',
-            BfCommands::IncValue => '+',
-            BfCommands::DecValue => '-',
-            BfCommands::OutputValue => '.',
-            BfCommands::InputValue => ',',
-            BfCommands::JumpForward => '[',
-            BfCommands::JumpBackward => ']',
+            BfCommand::IncDataPointer => '>',
+            BfCommand::DecDataPointer => '<',
+            BfCommand::IncValue => '+',
+            BfCommand::DecValue => '-',
+            BfCommand::OutputValue => '.',
+            BfCommand::InputValue => ',',
+            BfCommand::JumpForward => '[',
+            BfCommand::JumpBackward => ']',
         }
     }
 }
 
 /// Display a BF command in a very verbose manner for human consumption
-impl fmt::Display for BfCommands {
+impl fmt::Display for BfCommand {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            BfCommands::IncDataPointer => write!(f, "Increment data pointer"),
-            BfCommands::DecDataPointer => write!(f, "Decrement data pointer"),
-            BfCommands::IncValue => write!(f, "Increment byte at data pointer"),
-            BfCommands::DecValue => write!(f, "Decrement byte at data pointer"),
-            BfCommands::OutputValue => write!(f, "Output byte at data pointer"),
-            BfCommands::InputValue => write!(f, "Input byte at data pointer"),
-            BfCommands::JumpForward => write!(f, "Jump forward if zero"),
-            BfCommands::JumpBackward => write!(f, "Jump backward if nonzero"),
+            BfCommand::IncDataPointer => write!(f, "Increment data pointer"),
+            BfCommand::DecDataPointer => write!(f, "Decrement data pointer"),
+            BfCommand::IncValue => write!(f, "Increment byte at data pointer"),
+            BfCommand::DecValue => write!(f, "Decrement byte at data pointer"),
+            BfCommand::OutputValue => write!(f, "Output byte at data pointer"),
+            BfCommand::InputValue => write!(f, "Input byte at data pointer"),
+            BfCommand::JumpForward => write!(f, "Jump forward if zero"),
+            BfCommand::JumpBackward => write!(f, "Jump backward if nonzero"),
         }
     }
 }
@@ -85,8 +82,11 @@ impl fmt::Display for BfCommands {
 /// Typical usage is to create a vector of BfInstructions which will equate to a Brain Fuck program
 #[derive(Debug, PartialEq)]
 pub struct BfInstruction {
-    command: BfCommands,
+    /// The BF command that makes up the instruction
+    command: BfCommand,
+    /// The line number of the BF command in the source
     line_no: usize,
+    /// The offset from the start of the line of the BF command in the source
     char_pos: usize,
 }
 
@@ -100,7 +100,7 @@ impl BfInstruction {
     /// ``
     /// instructions.push(BfInstruction::new(command, line_no, char_pos));
     /// ``
-    pub fn new(command: BfCommands, line_no: usize, char_pos: usize) -> Self {
+    pub fn new(command: BfCommand, line_no: usize, char_pos: usize) -> Self {
         Self {
             command,
             line_no,
@@ -109,7 +109,7 @@ impl BfInstruction {
     }
 
     /// The BF command.
-    pub fn command(&self) -> BfCommands {
+    pub fn command(&self) -> BfCommand {
         self.command
     }
 
@@ -151,7 +151,7 @@ pub struct BfProgram {
 // Implementations for BfProgram
 impl BfProgram {
     /// The filename the program was read from
-    pub fn filename(&self) -> &PathBuf {
+    pub fn filename(&self) -> &Path {
         &self.filename
     }
 
@@ -179,16 +179,17 @@ impl BfProgram {
     /// Exmaple:
     ///
     /// ``
-    /// let content = fs::read_to_string(filename.as_ref())?;
-    /// let program = BfProgram::new(filename, content)?;
+    /// let filename:String = std::env::args().nth(1);
+    /// let content = std::fs::read_to_string(&filename).unwrap();
+    /// let program = bft_types::BfProgram::new(filename, &content).unwrap();
     /// ``
-    pub fn new(filename: &dyn AsRef<Path>, content: &str) -> std::io::Result<Self> {
+    pub fn new(filename: impl AsRef<Path>, content: &str) -> std::io::Result<Self> {
         let mut instructions = Vec::new();
         let mut line_no = 1;
         for line in content.lines() {
             let mut char_pos = 1;
             for ch in line.chars() {
-                if let Some(command) = BfCommands::from_char(ch) {
+                if let Some(command) = BfCommand::from_char(ch) {
                     instructions.push(BfInstruction::new(command, line_no, char_pos));
                 }
                 char_pos += 1;
@@ -210,15 +211,13 @@ impl BfProgram {
     ///
     /// ```no_run
     /// use bft_types::BfProgram;
-    /// let program = BfProgram::from_file(&"hello-world.bf".to_string());
+    /// let program = BfProgram::from_file(&"hello-world.bf");
     /// for inst in program.expect("Opps").instructions() {
     ///    println!("{:?}", inst);
     /// }
     /// ```
-    pub fn from_file(filename: &dyn AsRef<Path>) -> std::io::Result<BfProgram> {
-        println!("BF file: {:#?}", filename.as_ref().display());
+    pub fn from_file(filename: impl AsRef<Path>) -> std::io::Result<BfProgram> {
         let content = fs::read_to_string(filename.as_ref())?;
-        println!("BF program: {}", content);
         let program = BfProgram::new(filename, &content)?;
         Ok(program)
     }
@@ -243,7 +242,7 @@ mod tests {
         // First command should be Inc and is at line 1, offset 1
         assert_eq!(
             program.instructions()[0].command(),
-            BfCommands::IncDataPointer
+            BfCommand::IncDataPointer
         );
         assert_eq!(program.instructions()[0].line_no(), 1);
         assert_eq!(program.instructions()[0].char_pos(), 1);
@@ -253,7 +252,7 @@ mod tests {
             .instructions()
             .last()
             .expect("Invalid last instruction");
-        assert_eq!(last_inst.command(), BfCommands::OutputValue);
+        assert_eq!(last_inst.command(), BfCommand::OutputValue);
         assert_eq!(last_inst.line_no(), 2);
         assert_eq!(last_inst.char_pos(), 2);
     }
@@ -267,7 +266,7 @@ mod tests {
 
         assert_eq!(
             program.instructions()[0].command(),
-            BfCommands::IncDataPointer
+            BfCommand::IncDataPointer
         );
         assert_eq!(program.instructions()[0].line_no(), 1);
         assert_eq!(program.instructions()[0].char_pos(), 1);
@@ -279,7 +278,7 @@ mod tests {
 
         assert_eq!(
             program.instructions()[0].command(),
-            BfCommands::DecDataPointer
+            BfCommand::DecDataPointer
         );
         assert_eq!(program.instructions()[0].line_no(), 1);
         assert_eq!(program.instructions()[0].char_pos(), 1);
@@ -287,59 +286,37 @@ mod tests {
 
     #[test]
     fn check_inc_value_command() {
-        let program = BfProgram::new(&"sample.bf", "+").unwrap();
-
-        assert_eq!(program.instructions()[0].command(), BfCommands::IncValue);
-        assert_eq!(program.instructions()[0].line_no(), 1);
-        assert_eq!(program.instructions()[0].char_pos(), 1);
+        assert_eq!(BfCommand::from_char('+'), Some(BfCommand::IncValue));
     }
 
     #[test]
     fn check_dec_value_command() {
-        let program = BfProgram::new(&"sample.bf", "-").unwrap();
-
-        assert_eq!(program.instructions()[0].command(), BfCommands::DecValue);
-        assert_eq!(program.instructions()[0].line_no(), 1);
-        assert_eq!(program.instructions()[0].char_pos(), 1);
+        assert_eq!(BfCommand::from_char('-'), Some(BfCommand::DecValue));
     }
 
     #[test]
     fn check_output_byte_command() {
-        let program = BfProgram::new(&"sample.bf", ".").unwrap();
-
-        assert_eq!(program.instructions()[0].command(), BfCommands::OutputValue);
-        assert_eq!(program.instructions()[0].line_no(), 1);
-        assert_eq!(program.instructions()[0].char_pos(), 1);
+        assert_eq!(BfCommand::from_char('.'), Some(BfCommand::OutputValue));
     }
 
     #[test]
     fn check_input_byte_command() {
-        let program = BfProgram::new(&"sample.bf", ",").unwrap();
-
-        assert_eq!(program.instructions()[0].command(), BfCommands::InputValue);
-        assert_eq!(program.instructions()[0].line_no(), 1);
-        assert_eq!(program.instructions()[0].char_pos(), 1);
+        assert_eq!(BfCommand::from_char(','), Some(BfCommand::InputValue));
     }
 
     #[test]
     fn check_jump_forward_command() {
-        let program = BfProgram::new(&"sample.bf", "[").unwrap();
-
-        assert_eq!(program.instructions()[0].command(), BfCommands::JumpForward);
-        assert_eq!(program.instructions()[0].line_no(), 1);
-        assert_eq!(program.instructions()[0].char_pos(), 1);
+        assert_eq!(BfCommand::from_char('['), Some(BfCommand::JumpForward));
     }
 
     #[test]
     fn check_jump_backward_command() {
-        let program = BfProgram::new(&"sample.bf", "]").unwrap();
+        assert_eq!(BfCommand::from_char(']'), Some(BfCommand::JumpBackward));
+    }
 
-        assert_eq!(
-            program.instructions()[0].command(),
-            BfCommands::JumpBackward
-        );
-        assert_eq!(program.instructions()[0].line_no(), 1);
-        assert_eq!(program.instructions()[0].char_pos(), 1);
+    #[test]
+    fn check_invalid_command() {
+        assert_eq!(BfCommand::from_char('X'), None);
     }
 
     // Check that non BF characters in the source file are skipped.

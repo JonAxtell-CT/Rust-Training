@@ -1,8 +1,5 @@
 use std::env;
 
-#[allow(dead_code)]
-const DEBUG: bool = true; // Set to true to enable debugging code
-
 /// Program to read a Brain Fuck program and run it
 /// Usage:
 ///     bft <filename.bf>
@@ -11,8 +8,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let program =
         bft_types::BfProgram::from_file(&env::args().nth(1).ok_or("You didn't specify a file")?)?;
 
-    if DEBUG {
-        // Debug code to dump BF program.
+    // Debug code to dump BF program.
+    if cfg!(debug_assertions) {
         for inst in program.instructions() {
             // println!("{:?}", inst);
             println!(
