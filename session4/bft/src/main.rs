@@ -1,12 +1,13 @@
-use std::env;
+mod cli;
 
 /// Program to read a Brain Fuck program and run it
 /// Usage:
 ///     bft <filename.bf>
 ///
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let program =
-        bft_types::BfProgram::from_file(&env::args().nth(1).ok_or("You didn't specify a file")?)?;
+    let args = cli::Args::new();
+
+    let program = bft_types::BfProgram::from_file(args.program)?;
 
     // Debug code to dump BF program.
     for inst in program.instructions() {
