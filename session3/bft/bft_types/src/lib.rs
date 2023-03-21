@@ -25,9 +25,7 @@ pub enum BfCommand {
     JumpBackward,
 }
 
-/*
- * Implementation details for Brain Fuck commands
- */
+// Implementation details for Brain Fuck commands
 impl BfCommand {
     /// Connvert a character to a BF command. An option is returned which
     /// will be none if the character is not a valid BF command.
@@ -90,9 +88,7 @@ pub struct BfInstruction {
     char_pos: usize,
 }
 
-/*
- * Implementations for BfInstructions
- */
+// Implementations for BfInstructions
 impl BfInstruction {
     /// Create a new BF instruction.
     ///
@@ -118,7 +114,7 @@ impl BfInstruction {
         self.line_no
     }
 
-    // The char offset within the line the BF command was read from.
+    // The char position within the line the BF command was read from.
     pub fn char_pos(&self) -> usize {
         self.char_pos
     }
@@ -166,9 +162,7 @@ impl BfProgram {
     }
 }
 
-/*
- * Implementation details for Brain Fuck program
- */
+// Implementation details for Brain Fuck program
 impl BfProgram {
     /// Create a new Brain Fuck program from a string.
     /// The filename the contents were read from are passed as arguments so that

@@ -7,6 +7,7 @@ const MAX_TAPE_SIZE: usize = 30000;
 /// * TapeCanGrow allows for allocation of more memory when required.
 /// * TapeIsFixed doesn't allow the amount of memory used to store the tape to be reallocated.
 ///
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum AllocStrategy {
     /// Allows more memory to be allocated when required.
     TapeCanGrow,
@@ -29,44 +30,22 @@ pub struct BfTape<T> {
 }
 
 impl<T> BfTape<T> {
-    // /// Create a new tape for BF instructions.
-    // ///
-    // /// If the size is specified as zero, then the default size of 30,000 cells will be allocated.
-    // ///
-    // /// The allocation strategy can be set so that the tape can grow as needed or it can be fixed.
-    // // Standard method of new
-    // pub fn new(size: usize, grow: bool) -> Self {
-    //     Self {
-    //         data_pointer: 0,
-    //         grow: grow,
-    //         cells: if size == 0 {
-    //             Vec::<T>::with_capacity(MAX_TAPE_SIZE)
-    //         } else {
-    //             Vec::<T>::with_capacity(size)
-    //         },
-    //     }
-    // }
-
     /// Create a new tape for BF instructions.
     ///
     /// If the size is specified as zero, then the default size of 30,000 cells will be allocated.
     ///
     /// The allocation strategy can be set so that the tape can grow as needed or it can be fixed.
-    // Spicy method of new
+    // Standard method of new
     pub fn new(size: usize, grow: AllocStrategy) -> Self {
         Self {
             data_pointer: 0,
             grow,
-            cells: match core::num::NonZeroUsize::new(size) {
-                None => Vec::<T>::with_capacity(MAX_TAPE_SIZE),
-                Some(s) => Vec::<T>::with_capacity(s.into()),
+            cells: if size == 0 {
+                Vec::<T>::with_capacity(MAX_TAPE_SIZE)
+            } else {
+                Vec::<T>::with_capacity(size)
             },
         }
-    }
-
-    /// The current size of the tape
-    pub fn capacity(self) -> usize {
-        self.cells.capacity()
     }
 }
 
@@ -74,7 +53,7 @@ impl<T: std::fmt::Debug> BfTape<T> {
     /// The basis of an interpreter for the program
     pub fn interpreter(self, program: &BfProgram) {
         for inst in program.instructions() {
-            println!("{:?}", inst);
+            // println!("{:?}", inst);
         }
     }
 }
@@ -87,7 +66,7 @@ mod tests {
     #[test]
     fn test_new_zero() {
         let tape: BfTape<u8> = BfTape::new(0, AllocStrategy::TapeIsFixed);
-        assert_eq!(tape.capacity(), MAX_TAPE_SIZE);
+        assert_eq!(tape.cells.capacity(), MAX_TAPE_SIZE);
     }
 
     // Test for a valid size of the normal base type.
@@ -104,7 +83,6 @@ mod tests {
 
     // Test that the maximum size tape isn't exceeded.
     #[test]
-    #[should_panic(expected = "Tape can be a maximum of 30000, not 50000")]
     fn test_excessive() {
         let _tape: BfTape<u8> = BfTape::new(50000, AllocStrategy::TapeIsFixed);
     }

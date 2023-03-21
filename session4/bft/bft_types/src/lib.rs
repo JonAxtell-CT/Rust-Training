@@ -7,27 +7,25 @@ use std::path::PathBuf;
 /// Brain Fuck commands
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum BfCommand {
-    /// Increment data pointer
+    /// Increment the data pointer (to point to the next cell to the right).
     IncDataPointer,
-    /// Decrement data pointer
+    /// Decrement the data pointer (to point to the next cell to the left).
     DecDataPointer,
-    /// Increment byte
+    /// Increment (increase by one) the byte at the data pointer.
     IncValue,
-    /// Decrement byte
+    /// Decrement (decrease by one) the byte at the data pointer.
     DecValue,
-    /// Output byte
+    /// Output the byte at the data pointer.
     OutputValue,
-    /// Input byte
+    /// Accept one byte of input, storing its value in the byte at the data pointer.
     InputValue,
-    /// Jump forward if value is zero
+    /// If the byte at the data pointer is zero, then instead of moving the instruction pointer forward to the next command, jump it forward to the command after the matching ] command.
     JumpForward,
-    /// Jump back if value is non-zero
+    /// If the byte at the data pointer is nonzero, then instead of moving the instruction pointer forward to the next command, jump it back to the command after the matching [ command.
     JumpBackward,
 }
 
-/*
- * Implementation details for Brain Fuck commands
- */
+// Implementation details for Brain Fuck commands
 impl BfCommand {
     /// Connvert a character to a BF command. An option is returned which
     /// will be none if the character is not a valid BF command.
@@ -90,9 +88,7 @@ pub struct BfInstruction {
     char_pos: usize,
 }
 
-/*
- * Implementations for BfInstructions
- */
+// Implementations for BfInstructions
 impl BfInstruction {
     /// Create a new BF instruction.
     ///
@@ -118,7 +114,7 @@ impl BfInstruction {
         self.line_no
     }
 
-    // The char offset within the line the BF command was read from.
+    // The char position within the line the BF command was read from.
     pub fn char_pos(&self) -> usize {
         self.char_pos
     }
@@ -166,9 +162,7 @@ impl BfProgram {
     }
 }
 
-/*
- * Implementation details for Brain Fuck program
- */
+// Implementation details for Brain Fuck program
 impl BfProgram {
     /// Create a new Brain Fuck program from a string.
     /// The filename the contents were read from are passed as arguments so that
@@ -179,8 +173,9 @@ impl BfProgram {
     /// Exmaple:
     ///
     /// ``
-    /// let content = fs::read_to_string(filename.as_ref())?;
-    /// let program = BfProgram::new(filename, content)?;
+    /// let filename:String = std::env::args().nth(1);
+    /// let content = std::fs::read_to_string(&filename).unwrap();
+    /// let program = bft_types::BfProgram::new(filename, &content).unwrap();
     /// ``
     pub fn new(filename: impl AsRef<Path>, content: &str) -> std::io::Result<Self> {
         let mut instructions = Vec::new();
@@ -216,11 +211,54 @@ impl BfProgram {
     /// }
     /// ```
     pub fn from_file(filename: impl AsRef<Path>) -> std::io::Result<BfProgram> {
-        println!("BF file: {:#?}", filename.as_ref().display());
         let content = fs::read_to_string(filename.as_ref())?;
-        println!("BF program: {}", content);
         let program = BfProgram::new(filename, &content)?;
         Ok(program)
+    }
+
+    /// Validate a BrainFuck program
+    ///
+    /// Note: Currently just does a simplistic check of the jumps and makes sure
+    /// they match in number.
+    ///
+    /// Todo: Make the check parse the jumps and find where the jump backs get
+    /// out of step with the jump forwards. In other words when there is an extra
+    /// jump back point out the location (line, offset).
+    /// Eg. []] will error on offset 3
+    ///
+    /// Usage:
+    /// ```
+    ///   let mut program = bft_types::BfProgram::new(&"sample.bf", "[>]").unwrap();
+    ///   if program.validate() {
+    ///     println!("Valid BF program, will now run it....");
+    ///   }
+    ///   let mut program = bft_types::BfProgram::new(&"sample.bf", "[]]").unwrap();
+    ///   if !program.validate() {
+    ///     println!("Not a valid BF program");
+    ///   }
+    /// ```
+    pub fn validate(&mut self) -> bool {
+        println!("Validating...");
+        let fwd = &self
+            .instructions
+            .iter()
+            .filter(|i| i.command() == BfCommand::JumpForward)
+            .count();
+        // .collect::<Vec<&BfInstruction>>();
+        let back = &self
+            .instructions
+            .iter()
+            .filter(|i| i.command() == BfCommand::JumpBackward)
+            .count();
+        // .collect::<Vec<&BfInstruction>>();
+
+        fwd == back
+
+        // for i in &self.instructions {
+        //       if i.command() == BfCommand::JumpForward || i.command() == BfCommand::JumpBackward {
+        //           println!("{:?}", i);
+        //       }
+        //   }
     }
 }
 
@@ -287,56 +325,37 @@ mod tests {
 
     #[test]
     fn check_inc_value_command() {
-        let program = BfProgram::new(&"sample.bf", "+").unwrap();
-
-        assert_eq!(program.instructions()[0].command(), BfCommand::IncValue);
-        assert_eq!(program.instructions()[0].line_no(), 1);
-        assert_eq!(program.instructions()[0].char_pos(), 1);
+        assert_eq!(BfCommand::from_char('+'), Some(BfCommand::IncValue));
     }
 
     #[test]
     fn check_dec_value_command() {
-        let program = BfProgram::new(&"sample.bf", "-").unwrap();
-
-        assert_eq!(program.instructions()[0].command(), BfCommand::DecValue);
-        assert_eq!(program.instructions()[0].line_no(), 1);
-        assert_eq!(program.instructions()[0].char_pos(), 1);
+        assert_eq!(BfCommand::from_char('-'), Some(BfCommand::DecValue));
     }
 
     #[test]
     fn check_output_byte_command() {
-        let program = BfProgram::new(&"sample.bf", ".").unwrap();
-
-        assert_eq!(program.instructions()[0].command(), BfCommand::OutputValue);
-        assert_eq!(program.instructions()[0].line_no(), 1);
-        assert_eq!(program.instructions()[0].char_pos(), 1);
+        assert_eq!(BfCommand::from_char('.'), Some(BfCommand::OutputValue));
     }
 
     #[test]
     fn check_input_byte_command() {
-        let program = BfProgram::new(&"sample.bf", ",").unwrap();
-
-        assert_eq!(program.instructions()[0].command(), BfCommand::InputValue);
-        assert_eq!(program.instructions()[0].line_no(), 1);
-        assert_eq!(program.instructions()[0].char_pos(), 1);
+        assert_eq!(BfCommand::from_char(','), Some(BfCommand::InputValue));
     }
 
     #[test]
     fn check_jump_forward_command() {
-        let program = BfProgram::new(&"sample.bf", "[").unwrap();
-
-        assert_eq!(program.instructions()[0].command(), BfCommand::JumpForward);
-        assert_eq!(program.instructions()[0].line_no(), 1);
-        assert_eq!(program.instructions()[0].char_pos(), 1);
+        assert_eq!(BfCommand::from_char('['), Some(BfCommand::JumpForward));
     }
 
     #[test]
     fn check_jump_backward_command() {
-        let program = BfProgram::new(&"sample.bf", "]").unwrap();
+        assert_eq!(BfCommand::from_char(']'), Some(BfCommand::JumpBackward));
+    }
 
-        assert_eq!(program.instructions()[0].command(), BfCommand::JumpBackward);
-        assert_eq!(program.instructions()[0].line_no(), 1);
-        assert_eq!(program.instructions()[0].char_pos(), 1);
+    #[test]
+    fn check_invalid_command() {
+        assert_eq!(BfCommand::from_char('X'), None);
     }
 
     // Check that non BF characters in the source file are skipped.
@@ -351,5 +370,19 @@ mod tests {
     fn read_empty_file() {
         let program = BfProgram::new(&"empty-file.bf", "").unwrap();
         assert_eq!(program.size(), 0);
+    }
+
+    // Validate a good BF program
+    #[test]
+    fn validate_good() {
+        let mut program = BfProgram::new(&"good.bf", "><+-[.]").unwrap();
+        assert_eq!(program.validate(), true);
+    }
+
+    // Validate a good BF program
+    #[test]
+    fn validate_bad() {
+        let mut program = BfProgram::new(&"bad.bf", "><+-[.").unwrap();
+        assert_eq!(program.validate(), false);
     }
 }
