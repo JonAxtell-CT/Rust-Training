@@ -53,7 +53,7 @@ impl<T: std::fmt::Debug> BfTape<T> {
     /// The basis of an interpreter for the program
     pub fn interpreter(self, program: &BfProgram) {
         for inst in program.instructions() {
-            println!("{:?}", inst);
+            println!("{}", inst);
         }
     }
 }

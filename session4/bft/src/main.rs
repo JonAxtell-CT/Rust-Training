@@ -14,10 +14,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         for inst in program.instructions() {
             // println!("{:?}", inst);
             println!(
-                "[{}]: {} {} {}",
+                "[{}]: {} {}",
                 program.filename().to_string_lossy(),
-                inst.line_no(),
-                inst.char_pos(),
+                inst.location(),
                 inst.command(),
             );
         }
@@ -28,7 +27,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(()) => {
             println!("Jumps");
             for j in program.jump_locations() {
-                println!("{:?}", j);
+                println!("{}", j);
             }
 
             println!("Valid BF program, will now run it....");

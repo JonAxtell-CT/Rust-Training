@@ -79,7 +79,44 @@ impl fmt::Display for BfCommand {
     }
 }
 
-/// Brain Fuck instructions.
+/// Location of a command in a BF program.
+/// The point in the source file is comprised of the line number and the offset
+/// within the line.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct BfLocation {
+    /// The line number in the source
+    line: usize,
+    /// The offset from the start of the line in the source
+    offset: usize,
+}
+
+// Implementation details for locations in the source file of BF commands
+impl BfLocation {
+    /// Create a new BF location
+    pub fn new(line: usize, offset: usize) -> Self {
+        Self { line, offset }
+    }
+
+    /// The line number
+    pub fn line(&self) -> usize {
+        self.line
+    }
+
+    /// The offset within the line
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
+}
+
+/// Display a BF location for human consumption
+impl fmt::Display for BfLocation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {}", self.line, self.offset)
+    }
+}
+
+/// Brain Fuck instructions
+///
 /// Instructions consist of the BF command and the location in the file they were found at.
 /// The location is used for future reference.
 /// Typical usage is to create a vector of BfInstructions which will equate to a Brain Fuck program
@@ -87,10 +124,8 @@ impl fmt::Display for BfCommand {
 pub struct BfInstruction {
     /// The BF command that makes up the instruction
     command: BfCommand,
-    /// The line number of the BF command in the source
-    line_no: usize,
-    /// The offset from the start of the line of the BF command in the source
-    char_pos: usize,
+    /// The location in the source file where the command is
+    location: BfLocation,
 }
 
 // Implementations for BfInstructions
@@ -101,11 +136,10 @@ impl BfInstruction {
     /// ``
     /// instructions.push(BfInstruction::new(command, line_no, char_pos));
     /// ``
-    pub fn new(command: BfCommand, line_no: usize, char_pos: usize) -> Self {
+    pub fn new(command: BfCommand, line: usize, offset: usize) -> Self {
         Self {
             command,
-            line_no,
-            char_pos,
+            location: BfLocation { line, offset },
         }
     }
 
@@ -114,28 +148,71 @@ impl BfInstruction {
         self.command
     }
 
-    // The line the BF command was read from.
-    pub fn line_no(&self) -> usize {
-        self.line_no
-    }
-
-    // The char position within the line the BF command was read from.
-    pub fn char_pos(&self) -> usize {
-        self.char_pos
+    // The location (line and offset) the BF command was read from.
+    pub fn location(&self) -> BfLocation {
+        self.location
     }
 }
 
-/// Brain Fuck jumps.
+impl fmt::Display for BfInstruction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {}", self.command, self.location,)
+    }
+}
+
+/// Brain Fuck jumps
+///
 /// Jumps require matching up the start and end locations.
 /// This structure is records the position of the jump forward and the
 /// matching jump back.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct BfJumpLocation {
+    // Nesting depth of jumps (not used yet, maybe never
+    #[allow(unused)]
     depth: usize,
-    start_line_no: usize,
-    start_char_pos: usize,
-    end_line_no: usize,
-    end_char_pos: usize,
+
+    // Location of jump forward in the pair of jumps
+    forward: BfLocation,
+
+    // Location of jump back in the pair of jumps
+    backward: BfLocation,
+}
+
+// Implementations for BfJumpLocation
+impl BfJumpLocation {
+    /// Create a new BF jump location.
+    pub fn new(depth: usize, forward: BfLocation, backward: BfLocation) -> Self {
+        Self {
+            depth,
+            forward,
+            backward,
+        }
+    }
+
+    // Nesting depth for the pair of jumps
+    pub fn depth(&self) -> usize {
+        self.depth
+    }
+
+    // The location of the jump forward
+    pub fn forward(&self) -> BfLocation {
+        self.forward
+    }
+
+    // The location of the jump backward
+    pub fn backward(&self) -> BfLocation {
+        self.backward
+    }
+}
+
+impl fmt::Display for BfJumpLocation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Forward: {} Back: {} Depth: {}",
+            self.forward, self.backward, self.depth
+        )
+    }
 }
 
 /// Brain Fuck program
@@ -278,18 +355,16 @@ impl BfProgram {
                 // If stack is empty, then the jump forward for this jump back
                 // is missing. Or there is an extra jump back.
                 if stack.is_empty() {
-                    return Err(anyhow!("Extra jump back {:?}", i));
+                    return Err(anyhow!("Extra jump back {}", i));
                 }
 
                 // Make a note of the locations of the two jumps in the pair
                 let last_jump = stack.pop().unwrap();
                 self.jump_locations.push(BfJumpLocation {
                     depth: stack.len(),
-                    start_line_no: last_jump.line_no,
-                    start_char_pos: last_jump.char_pos,
-                    end_line_no: i.line_no,
-                    end_char_pos: i.char_pos,
-                })
+                    forward: last_jump.location,
+                    backward: i.location,
+                });
             }
         }
 
@@ -297,7 +372,7 @@ impl BfProgram {
         // extra jump forward.
         if !stack.is_empty() {
             let last_bracket = stack.pop().unwrap();
-            return Err(anyhow!("Extra jump forward {:?}", last_bracket));
+            return Err(anyhow!("Extra jump forward {}", last_bracket));
         }
 
         // Stack is empty, all jumps paired up, so pass their locations back
@@ -326,8 +401,8 @@ mod tests {
             program.instructions()[0].command(),
             BfCommand::IncDataPointer
         );
-        assert_eq!(program.instructions()[0].line_no(), 1);
-        assert_eq!(program.instructions()[0].char_pos(), 1);
+        assert_eq!(program.instructions()[0].location().line(), 1);
+        assert_eq!(program.instructions()[0].location().offset(), 1);
 
         // Last command should be Output and is at line 2, offset 2
         let last_inst = program
@@ -335,13 +410,14 @@ mod tests {
             .last()
             .expect("Invalid last instruction");
         assert_eq!(last_inst.command(), BfCommand::OutputValue);
-        assert_eq!(last_inst.line_no(), 2);
-        assert_eq!(last_inst.char_pos(), 2);
+        assert_eq!(last_inst.location().line(), 2);
+        assert_eq!(last_inst.location().offset(), 2);
     }
 
-    /*
-     * Check individual BF commands.
-     */
+    //
+    // Check individual BF commands.
+    //
+
     #[test]
     fn check_inc_data_pointer_command() {
         let program = BfProgram::new(&"sample.bf", ">").unwrap();
@@ -350,8 +426,8 @@ mod tests {
             program.instructions()[0].command(),
             BfCommand::IncDataPointer
         );
-        assert_eq!(program.instructions()[0].line_no(), 1);
-        assert_eq!(program.instructions()[0].char_pos(), 1);
+        assert_eq!(program.instructions()[0].location().line(), 1);
+        assert_eq!(program.instructions()[0].location().offset(), 1);
     }
 
     #[test]
@@ -362,8 +438,8 @@ mod tests {
             program.instructions()[0].command(),
             BfCommand::DecDataPointer
         );
-        assert_eq!(program.instructions()[0].line_no(), 1);
-        assert_eq!(program.instructions()[0].char_pos(), 1);
+        assert_eq!(program.instructions()[0].location().line(), 1);
+        assert_eq!(program.instructions()[0].location().offset(), 1);
     }
 
     #[test]
@@ -424,15 +500,41 @@ mod tests {
 
     // Validate a bad BF program
     #[test]
-    fn validate_bad_extra_closing_bracket() {
+    fn validate_extra_closing_bracket() {
         let mut program = BfProgram::new(&"bad.bf", "><+-.]").unwrap();
         assert_eq!(program.validate().is_err(), true);
     }
 
     // Validate a bad BF program
     #[test]
-    fn validate_bad_no_closing_bracket() {
+    fn validate_no_closing_bracket() {
         let mut program = BfProgram::new(&"bad.bf", "><+-[.").unwrap();
         assert_eq!(program.validate().is_err(), true);
+    }
+
+    // Validate a bad BF program
+    #[test]
+    fn validate_mismatched_bracket() {
+        let mut program = BfProgram::new(&"bad.bf", "><+-].[").unwrap();
+        assert_eq!(program.validate().is_err(), true);
+    }
+
+    // Validate a empty BF program
+    #[test]
+    fn validate_empty() {
+        let mut program = BfProgram::new(&"empty.bf", "").unwrap();
+        assert_eq!(program.validate().is_ok(), true);
+    }
+
+    // Check that the locations of jumps are correct in a good BF program
+    #[test]
+    fn validate_good_jumps() {
+        let mut program = BfProgram::new(&"good.bf", "><+-[.]").unwrap();
+        assert_eq!(program.validate().is_ok(), true);
+        assert_eq!(program.jump_locations().len(), 1);
+        assert_eq!(program.jump_locations()[0].forward.line(), 1);
+        assert_eq!(program.jump_locations()[0].forward.offset(), 5);
+        assert_eq!(program.jump_locations()[0].backward.line(), 1);
+        assert_eq!(program.jump_locations()[0].backward.offset(), 7);
     }
 }
