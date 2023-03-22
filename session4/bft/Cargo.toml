@@ -12,3 +12,4 @@ edition = "2021"
 bft_types = { version = "0.1.0", path = "bft_types" }
 bft_interp = { version = "0.1.0", path = "bft_interp" }
 clap = { version = "4.1.11", features = ["derive", "cargo"] }
+anyhow = "1.0.70"

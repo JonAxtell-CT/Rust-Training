@@ -24,11 +24,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Do some validation before running the BF program
-    if program.validate() {
-        println!("Valid BF program, will now run it....");
-    } else {
-        println!("Not a valid BF program");
-        return Ok(());
+    match program.validate() {
+        Ok(()) => {
+            println!("Jumps");
+            for j in program.jump_locations() {
+                println!("{:?}", j);
+            }
+
+            println!("Valid BF program, will now run it....");
+        }
+        Err(e) => {
+            println!("{}", e);
+        }
     }
 
     // Create a tape for the program to be used by the interpreter

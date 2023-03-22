@@ -1,3 +1,4 @@
+use anyhow::{anyhow, Result};
 use std::fmt;
 use std::fmt::Debug;
 use std::fs;
@@ -7,6 +8,8 @@ use std::path::PathBuf;
 /// Brain Fuck commands
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum BfCommand {
+    /// Comment, a character that is not a BF command
+    Comment,
     /// Increment the data pointer (to point to the next cell to the right).
     IncDataPointer,
     /// Decrement the data pointer (to point to the next cell to the left).
@@ -46,6 +49,7 @@ impl BfCommand {
     /// Convert a command back to a char if outputting the program
     pub fn to_char(cmd: BfCommand) -> char {
         match cmd {
+            BfCommand::Comment => '#',
             BfCommand::IncDataPointer => '>',
             BfCommand::DecDataPointer => '<',
             BfCommand::IncValue => '+',
@@ -62,6 +66,7 @@ impl BfCommand {
 impl fmt::Display for BfCommand {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            BfCommand::Comment => write!(f, "Comment"),
             BfCommand::IncDataPointer => write!(f, "Increment data pointer"),
             BfCommand::DecDataPointer => write!(f, "Decrement data pointer"),
             BfCommand::IncValue => write!(f, "Increment byte at data pointer"),
@@ -78,7 +83,7 @@ impl fmt::Display for BfCommand {
 /// Instructions consist of the BF command and the location in the file they were found at.
 /// The location is used for future reference.
 /// Typical usage is to create a vector of BfInstructions which will equate to a Brain Fuck program
-#[derive(Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct BfInstruction {
     /// The BF command that makes up the instruction
     command: BfCommand,
@@ -120,6 +125,19 @@ impl BfInstruction {
     }
 }
 
+/// Brain Fuck jumps.
+/// Jumps require matching up the start and end locations.
+/// This structure is records the position of the jump forward and the
+/// matching jump back.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct BfJumpLocation {
+    depth: usize,
+    start_line_no: usize,
+    start_char_pos: usize,
+    end_line_no: usize,
+    end_char_pos: usize,
+}
+
 /// Brain Fuck program
 ///
 /// To read a BF program from a file use the from_file method.
@@ -142,6 +160,8 @@ pub struct BfProgram {
     filename: PathBuf,
     /// The instructions parsed from the file
     instructions: Vec<BfInstruction>,
+    /// Locations of matching jumps
+    jump_locations: Vec<BfJumpLocation>,
 }
 
 // Implementations for BfProgram
@@ -154,6 +174,11 @@ impl BfProgram {
     /// The program's instructions
     pub fn instructions(&self) -> &Vec<BfInstruction> {
         &self.instructions
+    }
+
+    /// The program's jumps
+    pub fn jump_locations(&self) -> &Vec<BfJumpLocation> {
+        &self.jump_locations
     }
 
     /// Size of program
@@ -170,7 +195,7 @@ impl BfProgram {
     ///
     /// The contents are parsed for BF instructions.
     ///
-    /// Exmaple:
+    /// Example:
     ///
     /// ``
     /// let filename:String = std::env::args().nth(1);
@@ -194,6 +219,7 @@ impl BfProgram {
         let program = Self {
             filename: filename.as_ref().to_path_buf(),
             instructions,
+            jump_locations: Vec::new(),
         };
         Ok(program)
     }
@@ -216,49 +242,66 @@ impl BfProgram {
         Ok(program)
     }
 
-    /// Validate a BrainFuck program
+    /// Validate a BrainFuck program by finding matching jump forwards and backs
     ///
-    /// Note: Currently just does a simplistic check of the jumps and makes sure
-    /// they match in number.
-    ///
-    /// Todo: Make the check parse the jumps and find where the jump backs get
-    /// out of step with the jump forwards. In other words when there is an extra
-    /// jump back point out the location (line, offset).
-    /// Eg. []] will error on offset 3
+    /// Parse the instructions using a stack to keep track of jumps and when a pair
+    /// is found, place their locations in the source file in a vector. During the
+    /// parsing the stack is checked as it should not be empty when a jump back
+    /// is found, nor should it be empty when all instructions have been parsed.
+    /// The former means an extra jump back, the later means an extra jump forward.
     ///
     /// Usage:
     /// ```
     ///   let mut program = bft_types::BfProgram::new(&"sample.bf", "[>]").unwrap();
-    ///   if program.validate() {
+    ///   if program.validate().is_ok() {
     ///     println!("Valid BF program, will now run it....");
     ///   }
     ///   let mut program = bft_types::BfProgram::new(&"sample.bf", "[]]").unwrap();
-    ///   if !program.validate() {
+    ///   if program.validate().is_err() {
     ///     println!("Not a valid BF program");
     ///   }
     /// ```
-    pub fn validate(&mut self) -> bool {
+    pub fn validate(&mut self) -> Result<(), anyhow::Error> {
         println!("Validating...");
-        let fwd = &self
-            .instructions
-            .iter()
-            .filter(|i| i.command() == BfCommand::JumpForward)
-            .count();
-        // .collect::<Vec<&BfInstruction>>();
-        let back = &self
-            .instructions
-            .iter()
-            .filter(|i| i.command() == BfCommand::JumpBackward)
-            .count();
-        // .collect::<Vec<&BfInstruction>>();
 
-        fwd == back
+        // Use a stack to keep track of pairs of jumps. The [ and ] in the BF code.
+        // Jump forwards (the [) are pushed on to the stack. When a jump backward is
+        // found, the top item on the stack is removed which will be the matching jump
+        // forward. The locations of both jumps are then saved for later use
+        let mut stack: Vec<BfInstruction> = Vec::new();
 
-        // for i in &self.instructions {
-        //       if i.command() == BfCommand::JumpForward || i.command() == BfCommand::JumpBackward {
-        //           println!("{:?}", i);
-        //       }
-        //   }
+        // Parse the BF program and find the jumps
+        for i in &self.instructions {
+            if i.command == (BfCommand::JumpForward) {
+                stack.push(*i);
+            } else if i.command == (BfCommand::JumpBackward) {
+                // If stack is empty, then the jump forward for this jump back
+                // is missing. Or there is an extra jump back.
+                if stack.is_empty() {
+                    return Err(anyhow!("Extra jump back {:?}", i));
+                }
+
+                // Make a note of the locations of the two jumps in the pair
+                let last_jump = stack.pop().unwrap();
+                self.jump_locations.push(BfJumpLocation {
+                    depth: stack.len(),
+                    start_line_no: last_jump.line_no,
+                    start_char_pos: last_jump.char_pos,
+                    end_line_no: i.line_no,
+                    end_char_pos: i.char_pos,
+                })
+            }
+        }
+
+        // If the stack is not empty, then there is a missing jump back or an
+        // extra jump forward.
+        if !stack.is_empty() {
+            let last_bracket = stack.pop().unwrap();
+            return Err(anyhow!("Extra jump forward {:?}", last_bracket));
+        }
+
+        // Stack is empty, all jumps paired up, so pass their locations back
+        Ok(())
     }
 }
 
@@ -376,13 +419,20 @@ mod tests {
     #[test]
     fn validate_good() {
         let mut program = BfProgram::new(&"good.bf", "><+-[.]").unwrap();
-        assert_eq!(program.validate(), true);
+        assert_eq!(program.validate().is_ok(), true);
     }
 
-    // Validate a good BF program
+    // Validate a bad BF program
     #[test]
-    fn validate_bad() {
+    fn validate_bad_extra_closing_bracket() {
+        let mut program = BfProgram::new(&"bad.bf", "><+-.]").unwrap();
+        assert_eq!(program.validate().is_err(), true);
+    }
+
+    // Validate a bad BF program
+    #[test]
+    fn validate_bad_no_closing_bracket() {
         let mut program = BfProgram::new(&"bad.bf", "><+-[.").unwrap();
-        assert_eq!(program.validate(), false);
+        assert_eq!(program.validate().is_err(), true);
     }
 }

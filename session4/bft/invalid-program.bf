@@ -18,6 +18,8 @@
         >+              Add 1 to Cell #5
         <<<<-           Decrement the loop counter in Cell #1
 
+        ############    MISSING CLOSING BRACKET
+
     >+                  Add 1 to Cell #2
     >+                  Add 1 to Cell #3
     >-                  Subtract 1 from Cell #4
