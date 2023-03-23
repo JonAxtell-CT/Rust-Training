@@ -111,7 +111,7 @@ impl BfLocation {
 /// Display a BF location for human consumption
 impl fmt::Display for BfLocation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {}", self.line, self.offset)
+        write!(f, "{}:{}", self.line, self.offset)
     }
 }
 
@@ -155,8 +155,9 @@ impl BfInstruction {
 }
 
 impl fmt::Display for BfInstruction {
+    /// Format the BF instruction for display and human consumption
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {}", self.command, self.location,)
+        write!(f, "{} @{}", self.command, self.location,)
     }
 }
 
@@ -189,23 +190,25 @@ impl BfJumpLocation {
         }
     }
 
-    // Nesting depth for the pair of jumps
+    /// Nesting depth for the pair of jumps
+    // TODO: Not sure if it will be useful.
     pub fn depth(&self) -> usize {
         self.depth
     }
 
-    // The location of the jump forward
+    /// The location of the jump forward
     pub fn forward(&self) -> BfLocation {
         self.forward
     }
 
-    // The location of the jump backward
+    /// The location of the jump backward
     pub fn backward(&self) -> BfLocation {
         self.backward
     }
 }
 
 impl fmt::Display for BfJumpLocation {
+    /// Format the BF location for display and human consumption
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -274,11 +277,11 @@ impl BfProgram {
     ///
     /// Example:
     ///
-    /// ``
+    /// ```
     /// let filename:String = std::env::args().nth(1);
     /// let content = std::fs::read_to_string(&filename).unwrap();
     /// let program = bft_types::BfProgram::new(filename, &content).unwrap();
-    /// ``
+    /// ```
     pub fn new(filename: impl AsRef<Path>, content: &str) -> std::io::Result<Self> {
         let mut instructions = Vec::new();
         let mut line_no = 1;
@@ -306,7 +309,7 @@ impl BfProgram {
     ///
     /// Example:
     ///
-    /// ```no_run
+    /// ```
     /// use bft_types::BfProgram;
     /// let program = BfProgram::from_file(&"hello-world.bf");
     /// for inst in program.expect("Opps").instructions() {
@@ -355,7 +358,7 @@ impl BfProgram {
                 // If stack is empty, then the jump forward for this jump back
                 // is missing. Or there is an extra jump back.
                 if stack.is_empty() {
-                    return Err(anyhow!("Extra jump back {}", i));
+                    return Err(anyhow!("Extra {}", i));
                 }
 
                 // Make a note of the locations of the two jumps in the pair
@@ -372,7 +375,7 @@ impl BfProgram {
         // extra jump forward.
         if !stack.is_empty() {
             let last_bracket = stack.pop().unwrap();
-            return Err(anyhow!("Extra jump forward {}", last_bracket));
+            return Err(anyhow!("Extra {}", last_bracket));
         }
 
         // Stack is empty, all jumps paired up, so pass their locations back

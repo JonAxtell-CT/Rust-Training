@@ -16,6 +16,7 @@ dependencies = [
  "bft_interp",
  "bft_types",
  "clap",
+ "cli",
 ]
 
 [[package]]
@@ -24,6 +25,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bft_types",
+ "cli",
 ]
 
 [[package]]
@@ -86,6 +88,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "033f6b7a4acb1f358c742aaca805c939ee73b4c6209ae4318ec7aca81c42e646"
 dependencies = [
  "os_str_bytes",
+]
+
+[[package]]
+name = "cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
 ]
 
 [[package]]
