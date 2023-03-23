@@ -35,7 +35,7 @@ fn run_bft(args: &cli::Args) -> Result<(), Box<dyn std::error::Error>> {
     // Create a tape for the program to be used by the interpreter
     let mut tape: bft_interp::BfTape<u8> =
         bft_interp::BfTape::new(args.cell_count(), args.extensible());
-    tape.set_debug(args.debug().into());
+    tape.set_debug(args.debug());
     tape.interpreter(&program);
 
     Ok(())

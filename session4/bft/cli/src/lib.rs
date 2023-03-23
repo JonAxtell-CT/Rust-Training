@@ -44,11 +44,11 @@ impl std::convert::From<u8> for DebugLevelType {
     /// debug enum.
     fn from(orig: u8) -> Self {
         match orig {
-            0 => return DebugLevelType::None,
-            1 => return DebugLevelType::Information,
-            2 => return DebugLevelType::Verbose,
-            3 => return DebugLevelType::Detailed,
-            _ => return DebugLevelType::None,
+            0 => DebugLevelType::None,
+            1 => DebugLevelType::Information,
+            2 => DebugLevelType::Verbose,
+            3 => DebugLevelType::Detailed,
+            _ => DebugLevelType::None,
         }
     }
 }
@@ -65,6 +65,13 @@ pub struct Args {
 
     /// Debug
     debug: u8,
+}
+
+impl Default for Args {
+    /// Default instance of Args as recommended by Clippy
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Args {
@@ -106,7 +113,7 @@ impl Args {
         };
         println!("Extensible is {:?}", extensible);
 
-        let debug = matches.get_count("debug").into();
+        let debug = matches.get_count("debug");
         println!("Debug is {:?}", debug);
 
         Args {

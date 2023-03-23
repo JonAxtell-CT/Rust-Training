@@ -277,10 +277,11 @@ impl BfProgram {
     ///
     /// Example:
     ///
-    /// ```
-    /// let filename:String = std::env::args().nth(1);
-    /// let content = std::fs::read_to_string(&filename).unwrap();
-    /// let program = bft_types::BfProgram::new(filename, &content).unwrap();
+    /// ```no_run
+    /// use bft_types::BfProgram;
+    /// let filename:String = std::env::args().nth(1).ok_or("No file").unwrap();
+    /// let content:String = std::fs::read_to_string::<&String>(&filename).unwrap();
+    /// let program = BfProgram::new(filename, &content).unwrap();
     /// ```
     pub fn new(filename: impl AsRef<Path>, content: &str) -> std::io::Result<Self> {
         let mut instructions = Vec::new();
@@ -309,7 +310,7 @@ impl BfProgram {
     ///
     /// Example:
     ///
-    /// ```
+    /// ```no_run
     /// use bft_types::BfProgram;
     /// let program = BfProgram::from_file(&"hello-world.bf");
     /// for inst in program.expect("Opps").instructions() {
