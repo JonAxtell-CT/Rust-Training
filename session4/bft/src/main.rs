@@ -48,14 +48,14 @@ fn run_bft(args: &cli::Args) -> Result<(), Box<dyn std::error::Error>> {
 /// issues.
 ///
 /// Various options can be specified. They are
-/// * -c <cells>  - Specify the number of cells in the BF program's tape. The default is 30,000.
+/// * -c \<cells\>  - Specify the number of cells in the BF program's tape. The default is 30,000.
 /// * -e          - Allows the tape to grow as necessary. If not specified the tape is fixed in size.
 /// * -d          - Debug output. Multiple occurences of this option increase the amount of debug information that is output.
 /// * -h          - Help
 /// * -V          - Version
 ///
 /// Usage:
-///     bft <filename.bf> [options]
+///     bft <filename.bf> \[options\]
 fn main() {
     let args = &cli::Args::new();
     match run_bft(args) {
