@@ -14,3 +14,4 @@ bft_interp = { version = "0.1.0", path = "bft_interp" }
 cli = { version = "0.1.0", path = "cli" }
 clap = { version = "4.1.11", features = ["derive", "cargo"] }
 anyhow = "1.0.70"
+thiserror = "1.0.40"
