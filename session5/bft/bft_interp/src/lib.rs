@@ -115,9 +115,9 @@ impl<'a, T> BfTape<'a, T> {
 
 impl<'a, T: std::fmt::Debug> BfTape<'a, T> {
     /// The basis of an interpreter for the program
-    pub fn interpreter(self, program: &BfProgram) {
+    pub fn interpreter(self) {
         if self.debug > cli::DebugLevelType::None {
-            for inst in program.instructions() {
+            for inst in self.program.instructions() {
                 println!("{}", inst);
             }
         }
