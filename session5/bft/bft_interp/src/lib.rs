@@ -8,13 +8,16 @@ const MAX_TAPE_SIZE: usize = 30000;
 ///
 #[derive(Error, Debug)]
 pub enum BfError {
+    /// Error to indicate when the data pointer was moved before the start of the tape
     #[error(
         "Error: Data pointer moved before start of tape at {}",
         program_pointer
     )]
     DataPtrMovedBeforeStart { program_pointer: usize },
+    /// Error to indicate when the data pointer was moved after the end of the tape
     #[error("Error: Data pointer moved after end of tape at {}", program_pointer)]
     DataPtrMovedAfterEnd { program_pointer: usize },
+    /// Error the occurs when reading/writing using the input/output functionality of the tape
     #[error(
         "Error: I/O error {} at {} {} {}",
         error_msg,
@@ -30,7 +33,8 @@ pub enum BfError {
     },
 }
 
-/// Trait for the cells in the tape that allows them to be incremented/decremented.
+/// Trait for the cells in the tape that allows them to be incremented/decremented and for
+/// the value held in the cell to be set or extracted.
 ///
 pub trait CellKind:
     Default
@@ -74,6 +78,8 @@ pub trait CellKind:
         Self: std::marker::Sized;
 }
 
+/// Implementation of the Trait for the cells using u8
+///
 impl CellKind for u8 {
     /// Increment a data cell's value
     fn inc(&self) -> Self {
@@ -101,7 +107,8 @@ impl CellKind for u8 {
     }
 }
 
-/// A tape is a representation of a Brain Fuck program's data as it's being interpreted.
+/// A tape is a representation of a Brain Fuck program's data as it's being interpreted. The
+/// tape consists of cells which are manipulated as the BF program is interpreted.
 ///
 pub struct BfTape<'a, T> {
     /// The program pointer.
@@ -116,10 +123,12 @@ pub struct BfTape<'a, T> {
     tape_size: usize,
     /// The tape itself
     tape: Vec<T>,
-    /// Debug
+    /// Debug flag
     debug: cli::DebugLevelType,
 }
 
+/// Implementation of the BF program's tape
+///
 impl<'a, T: CellKind + std::clone::Clone + std::default::Default> BfTape<'a, T> {
     /// Create a new tape for BF instructions.
     ///
@@ -276,6 +285,8 @@ impl<'a, T: CellKind + std::clone::Clone + std::default::Default> BfTape<'a, T> 
     }
 }
 
+/// Implementation of the BF program's tape
+///
 impl<'a, T: std::fmt::Debug> BfTape<'a, T> {
     /// The basis of an interpreter for the program
     pub fn interpreter(self) {
