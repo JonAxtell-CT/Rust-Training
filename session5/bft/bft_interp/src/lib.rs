@@ -3,6 +3,8 @@ use thiserror::Error;
 
 const MAX_TAPE_SIZE: usize = 30000;
 
+/// Errors that can be returned by functions that handle running the BF program.
+///
 #[derive(Error, Debug, PartialEq)]
 pub enum BfError {
     #[error(
@@ -14,6 +16,29 @@ pub enum BfError {
     DataPtrMovedAfterEnd { program_pointer: usize },
 }
 
+/// Trait for the cells in the tape that allows them to be incremented/decremented.
+///
+pub trait CellKind {
+    /// Increment a data cell's value
+    fn inc(&self) -> Self
+    where
+        Self: std::marker::Sized;
+    /// Decrement a data cell's value
+    fn dec(&self) -> Self
+    where
+        Self: std::marker::Sized;
+}
+
+impl<T: num_traits::WrappingAdd + num_traits::WrappingSub + From<u8>> CellKind for T {
+    /// Increment a data cell's value
+    fn inc(&self) -> Self {
+        self.wrapping_add(&T::from(1))
+    }
+    /// Decrement a data cell's value
+    fn dec(&self) -> Self {
+        self.wrapping_sub(&T::from(1))
+    }
+}
 /// A tape is a representation of a Brain Fuck program's data as it's being interpreted.
 ///
 pub struct BfTape<'a, T> {
@@ -33,7 +58,7 @@ pub struct BfTape<'a, T> {
     debug: cli::DebugLevelType,
 }
 
-impl<'a, T> BfTape<'a, T> {
+impl<'a, T: CellKind + std::clone::Clone + std::default::Default> BfTape<'a, T> {
     /// Create a new tape for BF instructions.
     ///
     /// The BF program is passed in for reference purposes.
@@ -53,9 +78,9 @@ impl<'a, T> BfTape<'a, T> {
             tape_size,
             alloc_strategy,
             tape: if tape_size == 0 {
-                Vec::<T>::with_capacity(MAX_TAPE_SIZE)
+                vec![Default::default(); MAX_TAPE_SIZE]
             } else {
-                Vec::<T>::with_capacity(tape_size)
+                vec![Default::default(); tape_size]
             },
             debug: cli::DebugLevelType::None,
         }
@@ -97,6 +122,23 @@ impl<'a, T> BfTape<'a, T> {
         }
         self.data_pointer -= 1;
         Ok(())
+    }
+
+    /// Increment the value of the cell currently pointed to by the data pointer
+    pub fn increment_data_value(&mut self) -> Result<(), BfError> {
+        self.tape[self.data_pointer] = self.tape[self.data_pointer].inc();
+        Ok(())
+    }
+
+    /// Decrement the value of the cell currently pointed to by the data pointer
+    pub fn decrement_data_value(&mut self) -> Result<(), BfError> {
+        self.tape[self.data_pointer] = self.tape[self.data_pointer].dec();
+        Ok(())
+    }
+
+    /// Get the value of the cell currently pointed to by the data pointer
+    pub fn get_data_value(&mut self) -> &T {
+        &self.tape[self.data_pointer]
     }
 
     // Debug handling methods
@@ -185,5 +227,29 @@ mod tests {
             tape.move_data_pointer_forward(),
             Err(BfError::DataPtrMovedAfterEnd { program_pointer: 0 })
         );
+    }
+
+    /// Test that the value in a cell is incremented
+    #[test]
+    fn increment_cell_value() {
+        let program = BfProgram::new(&"increment.bf", "+").unwrap();
+        let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
+        tape.reset_data_pointer();
+        let _ans = tape.increment_data_value().unwrap();
+
+        // Check that the initial value of zero has been incremented to one
+        assert_eq!(*tape.get_data_value(), 1);
+    }
+
+    /// Test that the value in a cell is incremented
+    #[test]
+    fn decrement_cell_value() {
+        let program = BfProgram::new(&"increment.bf", "+").unwrap();
+        let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
+        tape.reset_data_pointer();
+        let _ans = tape.decrement_data_value().unwrap();
+
+        // Check that the initial value of zero has been decremented and wrapped around to 255 (the max in a u8)
+        assert_eq!(*tape.get_data_value(), 255);
     }
 }

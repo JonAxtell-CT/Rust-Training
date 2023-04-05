@@ -10,3 +10,4 @@ bft_types = { version = "0.1.0", path = "../bft_types" }
 cli = { version = "0.1.0", path = "../cli" }
 anyhow = "1.0.70"
 thiserror = "1.0.40"
+num-traits = "0.2.15"
