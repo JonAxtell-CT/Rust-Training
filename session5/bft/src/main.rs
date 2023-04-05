@@ -1,3 +1,5 @@
+use std::io::{stdin, stdout};
+
 /// Program to read a Brain Fuck program and run it
 ///
 fn run_bft(args: &cli::Args) -> Result<(), Box<dyn std::error::Error>> {
@@ -36,7 +38,12 @@ fn run_bft(args: &cli::Args) -> Result<(), Box<dyn std::error::Error>> {
     let mut tape: bft_interp::BfTape<u8> =
         bft_interp::BfTape::new(&program, args.cell_count(), args.extensible());
     tape.set_debug(args.debug());
-    tape.interpreter();
+
+    // And run the interpreter
+    match tape.interpreter(&mut stdin(), &mut stdout()) {
+        Ok(_) => {}
+        Err(e) => println!("Error {}", e),
+    }
 
     Ok(())
 }

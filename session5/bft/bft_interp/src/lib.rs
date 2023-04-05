@@ -10,13 +10,24 @@ const MAX_TAPE_SIZE: usize = 30000;
 pub enum BfError {
     /// Error to indicate when the data pointer was moved before the start of the tape
     #[error(
-        "Error: Data pointer moved before start of tape at {}",
-        program_pointer
+        "Error: Data pointer moved before start of tape at {} {}",
+        program_pointer,
+        instruction
     )]
-    DataPtrMovedBeforeStart { program_pointer: usize },
+    DataPtrMovedBeforeStart {
+        instruction: bft_types::BfInstruction,
+        program_pointer: usize,
+    },
     /// Error to indicate when the data pointer was moved after the end of the tape
-    #[error("Error: Data pointer moved after end of tape at {}", program_pointer)]
-    DataPtrMovedAfterEnd { program_pointer: usize },
+    #[error(
+        "Error: Data pointer moved after end of tape at {} {}",
+        program_pointer,
+        instruction
+    )]
+    DataPtrMovedAfterEnd {
+        instruction: bft_types::BfInstruction,
+        program_pointer: usize,
+    },
     /// Error the occurs when reading/writing using the input/output functionality of the tape
     #[error(
         "Error: I/O error {} at {} {} {}",
@@ -176,6 +187,7 @@ impl<'a, T: CellKind + std::clone::Clone + std::default::Default> BfTape<'a, T> 
             if self.alloc_strategy == cli::AllocStrategy::TapeIsFixed {
                 return Err(BfError::DataPtrMovedAfterEnd {
                     program_pointer: self.program_pointer,
+                    instruction: self.program.instructions()[self.program_pointer],
                 });
             }
             self.tape_size += 1;
@@ -189,10 +201,16 @@ impl<'a, T: CellKind + std::clone::Clone + std::default::Default> BfTape<'a, T> 
         if self.data_pointer == 0 {
             return Err(BfError::DataPtrMovedBeforeStart {
                 program_pointer: self.program_pointer,
+                instruction: self.program.instructions()[self.program_pointer],
             });
         }
         self.data_pointer -= 1;
         Ok(())
+    }
+
+    /// The instruction at the current program pointer
+    pub fn current_instruction(&self) -> &bft_types::BfInstruction {
+        &self.program.instructions()[self.program_pointer]
     }
 
     // Data value handling methods
@@ -227,10 +245,10 @@ impl<'a, T: CellKind + std::clone::Clone + std::default::Default> BfTape<'a, T> 
     ///     let program = bft_types::BfProgram::new(&"tiny.bf", "><+-.").unwrap();
     ///     let mut tape: bft_interp::BfTape<u8> = bft_interp::BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
     ///     let mut writer = std::io::Cursor::new(Vec::new());
-    ///     assert_eq!(tape.output(&mut writer).is_ok(), true);
+    ///     assert_eq!(tape.output_value(&mut writer).is_ok(), true);
     ///     assert_eq!(writer.into_inner()[0], 0);
     /// ```
-    pub fn output<W: Write>(&mut self, writer: &mut W) -> Result<(), BfError> {
+    pub fn output_value<W: Write>(&mut self, writer: &mut W) -> Result<(), BfError> {
         // Get the value of the cell in the tape at the current data pointer location
         let data = [self.tape[self.data_pointer].to_u8(); 1];
 
@@ -241,6 +259,11 @@ impl<'a, T: CellKind + std::clone::Clone + std::default::Default> BfTape<'a, T> 
             instruction: self.program.instructions()[self.program_pointer],
             program_pointer: self.program_pointer,
         })?;
+
+        if self.debug() != cli::DebugLevelType::None {
+            println!("Data={}", data[0]);
+        }
+
         Ok(())
     }
 
@@ -251,10 +274,10 @@ impl<'a, T: CellKind + std::clone::Clone + std::default::Default> BfTape<'a, T> 
     ///     let program = bft_types::BfProgram::new(&"tiny.bf", "><+-.").unwrap();
     ///     let mut tape: bft_interp::BfTape<u8> = bft_interp::BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
     ///     let mut reader = std::io::Cursor::new(vec![55]);
-    ///     assert_eq!(tape.input(&mut reader).is_ok(), true);
+    ///     assert_eq!(tape.input_value(&mut reader).is_ok(), true);
     ///     assert_eq!(tape.get_data_value(), 55);
     /// ```
-    pub fn input<R: Read>(&mut self, reader: &mut R) -> Result<(), BfError> {
+    pub fn input_value<R: Read>(&mut self, reader: &mut R) -> Result<(), BfError> {
         // Provide a place to put the byte read in
         let mut data = [0; 1];
 
@@ -287,14 +310,62 @@ impl<'a, T: CellKind + std::clone::Clone + std::default::Default> BfTape<'a, T> 
 
 /// Implementation of the BF program's tape
 ///
-impl<'a, T: std::fmt::Debug> BfTape<'a, T> {
+impl<'a, T: std::fmt::Debug + CellKind + std::clone::Clone + std::default::Default> BfTape<'a, T> {
     /// The basis of an interpreter for the program
-    pub fn interpreter(self) {
+
+    // Note: The tape "object" handles the program's execution, not the program "object" which
+    // is just a static representation of the program. Sounds like there should be another
+    // module which handles the running of the program and the interaction between program
+    // and tape.
+    pub fn interpreter<R: Read, W: Write>(
+        mut self,
+        reader: &mut R,
+        writer: &mut W,
+    ) -> Result<(), BfError> {
         if self.debug > cli::DebugLevelType::None {
             for inst in self.program.instructions() {
                 println!("{}", inst);
             }
         }
+
+        // Execute the program.
+
+        // Note: This doesn't work properly at the moment since the jump instructions
+        // haven't been implemented.
+        while self.program_pointer != self.program.instructions().len() {
+            let inst = self.program.instructions()[self.program_pointer];
+            let cmd = inst.command();
+            match cmd {
+                bft_types::BfCommand::Comment => {}
+                bft_types::BfCommand::IncDataPointer => {
+                    self.move_data_pointer_forward()?;
+                    self.program_pointer += 1;
+                }
+                bft_types::BfCommand::DecDataPointer => {
+                    self.move_data_pointer_back()?;
+                    self.program_pointer += 1;
+                }
+                bft_types::BfCommand::IncValue => {
+                    self.increment_data_value()?;
+                    self.program_pointer += 1;
+                }
+                bft_types::BfCommand::DecValue => {
+                    self.decrement_data_value()?;
+                    self.program_pointer += 1;
+                }
+                bft_types::BfCommand::OutputValue => {
+                    self.output_value(writer)?;
+                    self.program_pointer += 1;
+                }
+                bft_types::BfCommand::InputValue => {
+                    self.input_value(reader)?;
+                    self.program_pointer += 1;
+                }
+                bft_types::BfCommand::JumpForward => {}
+                bft_types::BfCommand::JumpBackward => {}
+            };
+        }
+        Ok(())
     }
 }
 
@@ -374,7 +445,7 @@ mod tests {
         let program = BfProgram::new(&"tiny.bf", "><+-.").unwrap();
         let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
         let mut writer = std::io::Cursor::new(Vec::new());
-        assert_eq!(tape.output(&mut writer).is_ok(), true);
+        assert_eq!(tape.output_value(&mut writer).is_ok(), true);
         assert_eq!(writer.into_inner()[0], 0);
     }
 
@@ -384,7 +455,7 @@ mod tests {
         let program = BfProgram::new(&"tiny.bf", "><+-.").unwrap();
         let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
         let mut reader = std::io::Cursor::new(vec![55]);
-        assert_eq!(tape.input(&mut reader).is_ok(), true);
+        assert_eq!(tape.input_value(&mut reader).is_ok(), true);
         assert_eq!(tape.get_data_value(), 55);
     }
 }
