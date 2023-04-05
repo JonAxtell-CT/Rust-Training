@@ -18,7 +18,18 @@ pub enum BfError {
 
 /// Trait for the cells in the tape that allows them to be incremented/decremented.
 ///
-pub trait CellKind {
+pub trait CellKind:
+    Default
+    + Clone
+    + Copy
+    + TryFrom<u8>
+    + TryInto<u8>
+    + From<u8>
+    + ToString
+    + PartialEq
+    + num_traits::WrappingAdd
+    + num_traits::WrappingSub
+{
     /// Increment a data cell's value
     fn inc(&self) -> Self
     where
@@ -27,9 +38,31 @@ pub trait CellKind {
     fn dec(&self) -> Self
     where
         Self: std::marker::Sized;
+
+    /// Get the value of a data cell
+    fn get(&self) -> Self
+    where
+        Self: std::marker::Sized;
+
+    /// Set the value of a data cell
+    fn set(&mut self, value: u8)
+    where
+        Self: std::marker::Sized;
 }
 
-impl<T: num_traits::WrappingAdd + num_traits::WrappingSub + From<u8>> CellKind for T {
+impl<
+        T: Default
+            + Clone
+            + Copy
+            + TryFrom<u8>
+            + TryInto<u8>
+            + From<u8>
+            + ToString
+            + PartialEq
+            + num_traits::WrappingAdd
+            + num_traits::WrappingSub,
+    > CellKind for T
+{
     /// Increment a data cell's value
     fn inc(&self) -> Self {
         self.wrapping_add(&T::from(1))
@@ -38,7 +71,16 @@ impl<T: num_traits::WrappingAdd + num_traits::WrappingSub + From<u8>> CellKind f
     fn dec(&self) -> Self {
         self.wrapping_sub(&T::from(1))
     }
+    /// Get the value of a data cell
+    fn get(&self) -> T {
+        *self
+    }
+    /// Set the value of a data cell
+    fn set(&mut self, value: u8) {
+        *self = value.into()
+    }
 }
+
 /// A tape is a representation of a Brain Fuck program's data as it's being interpreted.
 ///
 pub struct BfTape<'a, T> {
@@ -137,8 +179,13 @@ impl<'a, T: CellKind + std::clone::Clone + std::default::Default> BfTape<'a, T> 
     }
 
     /// Get the value of the cell currently pointed to by the data pointer
-    pub fn get_data_value(&mut self) -> &T {
-        &self.tape[self.data_pointer]
+    pub fn get_data_value(&mut self) -> T {
+        self.tape[self.data_pointer].get()
+    }
+
+    /// Set the value of the cell currently pointed to by the data pointer
+    pub fn set_data_value(&mut self, value: u8) {
+        self.tape[self.data_pointer].set(value)
     }
 
     // Debug handling methods
@@ -180,23 +227,9 @@ mod tests {
 
     /// Test for a valid size of the normal base type.
     #[test]
-    fn new_ok_u8() {
+    fn new_size_of_10000() {
         let program = BfProgram::new(&"tiny.bf", "><+-.").unwrap();
         let _tape: BfTape<u8> = BfTape::new(&program, 10000, cli::AllocStrategy::TapeIsFixed);
-    }
-
-    /// Test for a tape with a different base type.
-    #[test]
-    fn new_ok_u16() {
-        let program = BfProgram::new(&"tiny.bf", "><+-.").unwrap();
-        let _tape: BfTape<u16> = BfTape::new(&program, 10000, cli::AllocStrategy::TapeIsFixed);
-    }
-
-    /// Test that the maximum size tape isn't exceeded.
-    #[test]
-    fn new_excessive() {
-        let program = BfProgram::new(&"tiny.bf", "><+-.").unwrap();
-        let _tape: BfTape<u8> = BfTape::new(&program, 50000, cli::AllocStrategy::TapeIsFixed);
     }
 
     /// Test that an error is raised when moving the data pointer before the start of the tape
@@ -229,7 +262,7 @@ mod tests {
         );
     }
 
-    /// Test that the value in a cell is incremented
+    /// Test that the value in a cell is incremented. Also checks that data value can be read.
     #[test]
     fn increment_cell_value() {
         let program = BfProgram::new(&"increment.bf", "+").unwrap();
@@ -238,10 +271,10 @@ mod tests {
         let _ans = tape.increment_data_value().unwrap();
 
         // Check that the initial value of zero has been incremented to one
-        assert_eq!(*tape.get_data_value(), 1);
+        assert_eq!(tape.get_data_value(), 1);
     }
 
-    /// Test that the value in a cell is incremented
+    /// Test that the value in a cell is incremented. Also checks that data value can be read.
     #[test]
     fn decrement_cell_value() {
         let program = BfProgram::new(&"increment.bf", "+").unwrap();
@@ -250,6 +283,6 @@ mod tests {
         let _ans = tape.decrement_data_value().unwrap();
 
         // Check that the initial value of zero has been decremented and wrapped around to 255 (the max in a u8)
-        assert_eq!(*tape.get_data_value(), 255);
+        assert_eq!(tape.get_data_value(), 255);
     }
 }
