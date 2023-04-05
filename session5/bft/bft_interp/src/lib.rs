@@ -1,11 +1,12 @@
 use bft_types::BfProgram;
+use std::io::{Read, Write};
 use thiserror::Error;
 
 const MAX_TAPE_SIZE: usize = 30000;
 
 /// Errors that can be returned by functions that handle running the BF program.
 ///
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug)]
 pub enum BfError {
     #[error(
         "Error: Data pointer moved before start of tape at {}",
@@ -14,6 +15,19 @@ pub enum BfError {
     DataPtrMovedBeforeStart { program_pointer: usize },
     #[error("Error: Data pointer moved after end of tape at {}", program_pointer)]
     DataPtrMovedAfterEnd { program_pointer: usize },
+    #[error(
+        "Error: I/O error {} at {} {} {}",
+        error_msg,
+        filepath.display(),
+        instruction,
+        program_pointer
+    )]
+    IOError {
+        error_msg: std::io::Error,
+        filepath: std::path::PathBuf,
+        instruction: bft_types::BfInstruction,
+        program_pointer: usize,
+    },
 }
 
 /// Trait for the cells in the tape that allows them to be incremented/decremented.
@@ -40,7 +54,7 @@ pub trait CellKind:
         Self: std::marker::Sized;
 
     /// Get the value of a data cell
-    fn get(&self) -> Self
+    fn get(&self) -> u8
     where
         Self: std::marker::Sized;
 
@@ -48,36 +62,42 @@ pub trait CellKind:
     fn set(&mut self, value: u8)
     where
         Self: std::marker::Sized;
+
+    /// Convert the value of a data cell to a u8
+    fn to_u8(&self) -> u8
+    where
+        Self: std::marker::Sized;
+
+    /// Set the value of a data cell from a u8
+    fn from_u8(value: u8) -> Self
+    where
+        Self: std::marker::Sized;
 }
 
-impl<
-        T: Default
-            + Clone
-            + Copy
-            + TryFrom<u8>
-            + TryInto<u8>
-            + From<u8>
-            + ToString
-            + PartialEq
-            + num_traits::WrappingAdd
-            + num_traits::WrappingSub,
-    > CellKind for T
-{
+impl CellKind for u8 {
     /// Increment a data cell's value
     fn inc(&self) -> Self {
-        self.wrapping_add(&T::from(1))
+        self.wrapping_add(1)
     }
     /// Decrement a data cell's value
     fn dec(&self) -> Self {
-        self.wrapping_sub(&T::from(1))
+        self.wrapping_sub(1)
     }
     /// Get the value of a data cell
-    fn get(&self) -> T {
+    fn get(&self) -> u8 {
         *self
     }
     /// Set the value of a data cell
     fn set(&mut self, value: u8) {
         *self = value.into()
+    }
+    /// Convert the value of a data cell to a u8
+    fn to_u8(&self) -> u8 {
+        *self
+    }
+    /// Set the value of a data cell from a u8
+    fn from_u8(value: u8) -> Self {
+        value
     }
 }
 
@@ -166,6 +186,9 @@ impl<'a, T: CellKind + std::clone::Clone + std::default::Default> BfTape<'a, T> 
         Ok(())
     }
 
+    // Data value handling methods
+    // ###########################
+
     /// Increment the value of the cell currently pointed to by the data pointer
     pub fn increment_data_value(&mut self) -> Result<(), BfError> {
         self.tape[self.data_pointer] = self.tape[self.data_pointer].inc();
@@ -180,12 +203,63 @@ impl<'a, T: CellKind + std::clone::Clone + std::default::Default> BfTape<'a, T> 
 
     /// Get the value of the cell currently pointed to by the data pointer
     pub fn get_data_value(&mut self) -> T {
-        self.tape[self.data_pointer].get()
+        self.tape[self.data_pointer].get().into()
     }
 
     /// Set the value of the cell currently pointed to by the data pointer
     pub fn set_data_value(&mut self, value: u8) {
         self.tape[self.data_pointer].set(value)
+    }
+
+    /// Output the value of the cell currently pointed to by the data pointer
+    ///
+    /// Example usage:
+    /// ```
+    ///     let program = bft_types::BfProgram::new(&"tiny.bf", "><+-.").unwrap();
+    ///     let mut tape: bft_interp::BfTape<u8> = bft_interp::BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
+    ///     let mut writer = std::io::Cursor::new(Vec::new());
+    ///     assert_eq!(tape.output(&mut writer).is_ok(), true);
+    ///     assert_eq!(writer.into_inner()[0], 0);
+    /// ```
+    pub fn output<W: Write>(&mut self, writer: &mut W) -> Result<(), BfError> {
+        // Get the value of the cell in the tape at the current data pointer location
+        let data = [self.tape[self.data_pointer].to_u8(); 1];
+
+        // Write to where ever it's going, handling any i/o errors
+        writer.write(&data).map_err(|e| BfError::IOError {
+            error_msg: e,
+            filepath: self.program.filename().to_path_buf(),
+            instruction: self.program.instructions()[self.program_pointer],
+            program_pointer: self.program_pointer,
+        })?;
+        Ok(())
+    }
+
+    /// Input a value into the cell currently pointed to by the data pointer
+    ///
+    /// Example usage:
+    /// ```
+    ///     let program = bft_types::BfProgram::new(&"tiny.bf", "><+-.").unwrap();
+    ///     let mut tape: bft_interp::BfTape<u8> = bft_interp::BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
+    ///     let mut reader = std::io::Cursor::new(vec![55]);
+    ///     assert_eq!(tape.input(&mut reader).is_ok(), true);
+    ///     assert_eq!(tape.get_data_value(), 55);
+    /// ```
+    pub fn input<R: Read>(&mut self, reader: &mut R) -> Result<(), BfError> {
+        // Provide a place to put the byte read in
+        let mut data = [0; 1];
+
+        // Read the byte in, handling any i/o errors
+        reader.read(&mut data).map_err(|e| BfError::IOError {
+            error_msg: e,
+            filepath: self.program.filename().to_path_buf(),
+            instruction: self.program.instructions()[self.program_pointer],
+            program_pointer: self.program_pointer,
+        })?;
+
+        // Place the byte into the tape at the current data pointer location
+        self.set_data_value(data[0]);
+        Ok(())
     }
 
     // Debug handling methods
@@ -238,10 +312,9 @@ mod tests {
         let program = BfProgram::new(&"tiny.bf", "><+-.").unwrap();
         let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
         tape.reset_data_pointer();
-        assert_eq!(
-            tape.move_data_pointer_back(),
-            Err(BfError::DataPtrMovedBeforeStart { program_pointer: 0 })
-        );
+        // Now move the before the beginning of the tape
+        let result = tape.move_data_pointer_back();
+        assert_eq!(result.is_err(), true);
     }
 
     /// Test that an error is raised when moving the data pointer after the end of the tape
@@ -256,10 +329,8 @@ mod tests {
             }
         }
         // Now move past the end of the tape
-        assert_eq!(
-            tape.move_data_pointer_forward(),
-            Err(BfError::DataPtrMovedAfterEnd { program_pointer: 0 })
-        );
+        let result = tape.move_data_pointer_forward();
+        assert_eq!(result.is_err(), true);
     }
 
     /// Test that the value in a cell is incremented. Also checks that data value can be read.
@@ -277,12 +348,32 @@ mod tests {
     /// Test that the value in a cell is incremented. Also checks that data value can be read.
     #[test]
     fn decrement_cell_value() {
-        let program = BfProgram::new(&"increment.bf", "+").unwrap();
+        let program = BfProgram::new(&"decrement.bf", "-").unwrap();
         let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
         tape.reset_data_pointer();
         let _ans = tape.decrement_data_value().unwrap();
 
         // Check that the initial value of zero has been decremented and wrapped around to 255 (the max in a u8)
         assert_eq!(tape.get_data_value(), 255);
+    }
+
+    /// Test that output works
+    #[test]
+    fn output_cell_value() {
+        let program = BfProgram::new(&"tiny.bf", "><+-.").unwrap();
+        let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
+        let mut writer = std::io::Cursor::new(Vec::new());
+        assert_eq!(tape.output(&mut writer).is_ok(), true);
+        assert_eq!(writer.into_inner()[0], 0);
+    }
+
+    /// Test that input  works
+    #[test]
+    fn input_cell_value() {
+        let program = BfProgram::new(&"tiny.bf", "><+-.").unwrap();
+        let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
+        let mut reader = std::io::Cursor::new(vec![55]);
+        assert_eq!(tape.input(&mut reader).is_ok(), true);
+        assert_eq!(tape.get_data_value(), 55);
     }
 }
