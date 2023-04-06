@@ -391,14 +391,14 @@ mod tests {
     // Test that a small program is read and is the right size.
     #[test]
     fn minimal_program() {
-        let program = BfProgram::new(&"tiny.bf", "><+-.").unwrap();
+        let program = BfProgram::new("tiny.bf", "><+-.").unwrap();
         assert_eq!(program.size(), 5);
     }
 
     // Test that commands in a BF program have been read correctly.
     #[test]
     fn check_commands_in_minimal_program() {
-        let program = BfProgram::new(&"sample.bf", "><+\n-.").unwrap();
+        let program = BfProgram::new("sample.bf", "><+\n-.").unwrap();
 
         // First command should be Inc and is at line 1, offset 1
         assert_eq!(
@@ -424,7 +424,7 @@ mod tests {
 
     #[test]
     fn check_inc_data_pointer_command() {
-        let program = BfProgram::new(&"sample.bf", ">").unwrap();
+        let program = BfProgram::new("sample.bf", ">").unwrap();
 
         assert_eq!(
             program.instructions()[0].command(),
@@ -436,7 +436,7 @@ mod tests {
 
     #[test]
     fn check_dec_data_pointer_command() {
-        let program = BfProgram::new(&"sample.bf", "<").unwrap();
+        let program = BfProgram::new("sample.bf", "<").unwrap();
 
         assert_eq!(
             program.instructions()[0].command(),
@@ -484,57 +484,57 @@ mod tests {
     // Check that non BF characters in the source file are skipped.
     #[test]
     fn ignore_non_bf_commands() {
-        let program = BfProgram::new(&"not-bf.txt", "This is not a BF program").unwrap();
+        let program = BfProgram::new("not-bf.txt", "This is not a BF program").unwrap();
         assert_eq!(program.size(), 0);
     }
 
     // Check that an empty file is handled.
     #[test]
     fn read_empty_file() {
-        let program = BfProgram::new(&"empty-file.bf", "").unwrap();
+        let program = BfProgram::new("empty-file.bf", "").unwrap();
         assert_eq!(program.size(), 0);
     }
 
     // Validate a good BF program
     #[test]
     fn validate_good() {
-        let mut program = BfProgram::new(&"good.bf", "><+-[.]").unwrap();
-        assert_eq!(program.validate().is_ok(), true);
+        let mut program = BfProgram::new("good.bf", "><+-[.]").unwrap();
+        assert!(program.validate().is_ok());
     }
 
     // Validate a bad BF program
     #[test]
     fn validate_extra_closing_bracket() {
-        let mut program = BfProgram::new(&"bad.bf", "><+-.]").unwrap();
-        assert_eq!(program.validate().is_err(), true);
+        let mut program = BfProgram::new("bad.bf", "><+-.]").unwrap();
+        assert!(program.validate().is_err());
     }
 
     // Validate a bad BF program
     #[test]
     fn validate_no_closing_bracket() {
-        let mut program = BfProgram::new(&"bad.bf", "><+-[.").unwrap();
-        assert_eq!(program.validate().is_err(), true);
+        let mut program = BfProgram::new("bad.bf", "><+-[.").unwrap();
+        assert!(program.validate().is_err());
     }
 
     // Validate a bad BF program
     #[test]
     fn validate_mismatched_bracket() {
-        let mut program = BfProgram::new(&"bad.bf", "><+-].[").unwrap();
-        assert_eq!(program.validate().is_err(), true);
+        let mut program = BfProgram::new("bad.bf", "><+-].[").unwrap();
+        assert!(program.validate().is_err());
     }
 
     // Validate a empty BF program
     #[test]
     fn validate_empty() {
-        let mut program = BfProgram::new(&"empty.bf", "").unwrap();
-        assert_eq!(program.validate().is_ok(), true);
+        let mut program = BfProgram::new("empty.bf", "").unwrap();
+        assert!(program.validate().is_ok());
     }
 
     // Check that the locations of jumps are correct in a good BF program
     #[test]
     fn validate_good_jumps() {
-        let mut program = BfProgram::new(&"good.bf", "><+-[.]").unwrap();
-        assert_eq!(program.validate().is_ok(), true);
+        let mut program = BfProgram::new("good.bf", "><+-[.]").unwrap();
+        assert!(program.validate().is_ok());
         assert_eq!(program.jump_locations().len(), 1);
         assert_eq!(program.jump_locations()[0].forward.line(), 1);
         assert_eq!(program.jump_locations()[0].forward.offset(), 5);

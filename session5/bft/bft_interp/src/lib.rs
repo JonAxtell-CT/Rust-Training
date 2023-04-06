@@ -106,7 +106,7 @@ impl CellKind for u8 {
     }
     /// Set the value of a data cell
     fn set(&mut self, value: u8) {
-        *self = value.into()
+        *self = value
     }
     /// Convert the value of a data cell to a u8
     fn to_u8(&self) -> u8 {
@@ -376,7 +376,7 @@ mod tests {
     /// Test that specifying zero for the size creates a tape of the default size.
     #[test]
     fn new_default_size() {
-        let program = BfProgram::new(&"tiny.bf", "><+-.").unwrap();
+        let program = BfProgram::new("tiny.bf", "><+-.").unwrap();
         let tape: BfTape<u8> = BfTape::new(&program, 0, cli::AllocStrategy::TapeIsFixed);
         assert_eq!(tape.tape.capacity(), MAX_TAPE_SIZE);
     }
@@ -384,25 +384,25 @@ mod tests {
     /// Test for a valid size of the normal base type.
     #[test]
     fn new_size_of_10000() {
-        let program = BfProgram::new(&"tiny.bf", "><+-.").unwrap();
+        let program = BfProgram::new("tiny.bf", "><+-.").unwrap();
         let _tape: BfTape<u8> = BfTape::new(&program, 10000, cli::AllocStrategy::TapeIsFixed);
     }
 
     /// Test that an error is raised when moving the data pointer before the start of the tape
     #[test]
     fn data_pointer_moved_before_start() {
-        let program = BfProgram::new(&"tiny.bf", "><+-.").unwrap();
+        let program = BfProgram::new("tiny.bf", "><+-.").unwrap();
         let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
         tape.reset_data_pointer();
         // Now move the before the beginning of the tape
         let result = tape.move_data_pointer_back();
-        assert_eq!(result.is_err(), true);
+        assert!(result.is_err());
     }
 
     /// Test that an error is raised when moving the data pointer after the end of the tape
     #[test]
     fn data_pointer_moved_after_end() {
-        let program = BfProgram::new(&"tiny.bf", "><+-.").unwrap();
+        let program = BfProgram::new("tiny.bf", "><+-.").unwrap();
         let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
         tape.reset_data_pointer();
         for i in 0..100 {
@@ -412,16 +412,16 @@ mod tests {
         }
         // Now move past the end of the tape
         let result = tape.move_data_pointer_forward();
-        assert_eq!(result.is_err(), true);
+        assert!(result.is_err());
     }
 
     /// Test that the value in a cell is incremented. Also checks that data value can be read.
     #[test]
     fn increment_cell_value() {
-        let program = BfProgram::new(&"increment.bf", "+").unwrap();
+        let program = BfProgram::new("increment.bf", "+").unwrap();
         let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
         tape.reset_data_pointer();
-        let _ans = tape.increment_data_value().unwrap();
+        tape.increment_data_value().unwrap();
 
         // Check that the initial value of zero has been incremented to one
         assert_eq!(tape.get_data_value(), 1);
@@ -430,10 +430,10 @@ mod tests {
     /// Test that the value in a cell is incremented. Also checks that data value can be read.
     #[test]
     fn decrement_cell_value() {
-        let program = BfProgram::new(&"decrement.bf", "-").unwrap();
+        let program = BfProgram::new("decrement.bf", "-").unwrap();
         let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
         tape.reset_data_pointer();
-        let _ans = tape.decrement_data_value().unwrap();
+        tape.decrement_data_value().unwrap();
 
         // Check that the initial value of zero has been decremented and wrapped around to 255 (the max in a u8)
         assert_eq!(tape.get_data_value(), 255);
@@ -442,20 +442,20 @@ mod tests {
     /// Test that output works
     #[test]
     fn output_cell_value() {
-        let program = BfProgram::new(&"tiny.bf", "><+-.").unwrap();
+        let program = BfProgram::new("tiny.bf", "><+-.").unwrap();
         let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
         let mut writer = std::io::Cursor::new(Vec::new());
-        assert_eq!(tape.output_value(&mut writer).is_ok(), true);
+        assert!(tape.output_value(&mut writer).is_ok());
         assert_eq!(writer.into_inner()[0], 0);
     }
 
     /// Test that input  works
     #[test]
     fn input_cell_value() {
-        let program = BfProgram::new(&"tiny.bf", "><+-.").unwrap();
+        let program = BfProgram::new("tiny.bf", "><+-.").unwrap();
         let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
         let mut reader = std::io::Cursor::new(vec![55]);
-        assert_eq!(tape.input_value(&mut reader).is_ok(), true);
+        assert!(tape.input_value(&mut reader).is_ok());
         assert_eq!(tape.get_data_value(), 55);
     }
 }
