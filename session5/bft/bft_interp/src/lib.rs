@@ -28,6 +28,26 @@ pub enum BfError {
         instruction: bft_types::BfInstruction,
         program_pointer: usize,
     },
+    /// Error to indicate when the program pointer was moved after the end of the program
+    #[error(
+        "Error: Program pointer moved after end of program at {} {}",
+        program_pointer,
+        instruction
+    )]
+    ProgramPtrMovedAfterEnd {
+        instruction: bft_types::BfInstruction,
+        program_pointer: usize,
+    },
+    /// Error to indicate when the program pointer was moved before the start of the program
+    #[error(
+        "Error: Program pointer moved before start of program at {} {}",
+        program_pointer,
+        instruction
+    )]
+    ProgramPtrMovedBeforeStart {
+        instruction: bft_types::BfInstruction,
+        program_pointer: usize,
+    },
     /// Error the occurs when reading/writing using the input/output functionality of the tape
     #[error(
         "Error: I/O error {} at {} {} {}",
@@ -47,34 +67,13 @@ pub enum BfError {
 /// Trait for the cells in the tape that allows them to be incremented/decremented and for
 /// the value held in the cell to be set or extracted.
 ///
-pub trait CellKind:
-    Default
-    + Clone
-    + Copy
-    + TryFrom<u8>
-    + TryInto<u8>
-    + From<u8>
-    + ToString
-    + PartialEq
-    + num_traits::WrappingAdd
-    + num_traits::WrappingSub
-{
+pub trait CellKind: Default + Clone + Copy + std::fmt::Debug {
     /// Increment a data cell's value
-    fn inc(&self) -> Self
+    fn inc(&mut self) -> Self
     where
         Self: std::marker::Sized;
     /// Decrement a data cell's value
-    fn dec(&self) -> Self
-    where
-        Self: std::marker::Sized;
-
-    /// Get the value of a data cell
-    fn get(&self) -> u8
-    where
-        Self: std::marker::Sized;
-
-    /// Set the value of a data cell
-    fn set(&mut self, value: u8)
+    fn dec(&mut self) -> Self
     where
         Self: std::marker::Sized;
 
@@ -83,7 +82,7 @@ pub trait CellKind:
     where
         Self: std::marker::Sized;
 
-    /// Set the value of a data cell from a u8
+    /// Convert the value of a data cell from u8
     fn from_u8(value: u8) -> Self
     where
         Self: std::marker::Sized;
@@ -93,26 +92,21 @@ pub trait CellKind:
 ///
 impl CellKind for u8 {
     /// Increment a data cell's value
-    fn inc(&self) -> Self {
+    fn inc(&mut self) -> Self {
         self.wrapping_add(1)
     }
+
     /// Decrement a data cell's value
-    fn dec(&self) -> Self {
+    fn dec(&mut self) -> Self {
         self.wrapping_sub(1)
     }
-    /// Get the value of a data cell
-    fn get(&self) -> u8 {
-        *self
-    }
-    /// Set the value of a data cell
-    fn set(&mut self, value: u8) {
-        *self = value
-    }
+
     /// Convert the value of a data cell to a u8
     fn to_u8(&self) -> u8 {
         *self
     }
-    /// Set the value of a data cell from a u8
+
+    /// Convert the value of a data cell from u8
     fn from_u8(value: u8) -> Self {
         value
     }
@@ -130,8 +124,6 @@ pub struct BfTape<'a, T> {
     data_pointer: usize,
     /// Indicates if more memory can be allocated from it's initial size or if it is fixed
     alloc_strategy: cli::AllocStrategy,
-    /// The size of the tape
-    tape_size: usize,
     /// The tape itself
     tape: Vec<T>,
     /// Debug flag
@@ -140,7 +132,7 @@ pub struct BfTape<'a, T> {
 
 /// Implementation of the BF program's tape
 ///
-impl<'a, T: CellKind + std::clone::Clone + std::default::Default> BfTape<'a, T> {
+impl<'a, T: CellKind + std::clone::Clone + std::default::Default + std::fmt::Debug> BfTape<'a, T> {
     /// Create a new tape for BF instructions.
     ///
     /// The BF program is passed in for reference purposes.
@@ -157,7 +149,6 @@ impl<'a, T: CellKind + std::clone::Clone + std::default::Default> BfTape<'a, T> 
             program_pointer: 0,
             program,
             data_pointer: 0,
-            tape_size,
             alloc_strategy,
             tape: if tape_size == 0 {
                 vec![Default::default(); MAX_TAPE_SIZE]
@@ -183,14 +174,21 @@ impl<'a, T: CellKind + std::clone::Clone + std::default::Default> BfTape<'a, T> 
 
     /// Moves the data pointer forward
     pub fn move_data_pointer_forward(&mut self) -> Result<(), BfError> {
-        if self.data_pointer == self.tape_size {
-            if self.alloc_strategy == cli::AllocStrategy::TapeIsFixed {
-                return Err(BfError::DataPtrMovedAfterEnd {
-                    program_pointer: self.program_pointer,
-                    instruction: self.program.instructions()[self.program_pointer],
-                });
+        if self.data_pointer == self.tape.len() - 1 {
+            // The data pointer is at the end of the tape, we can either abort the BF program
+            // or extend the tape.
+            match self.alloc_strategy {
+                cli::AllocStrategy::TapeIsFixed => {
+                    return Err(BfError::DataPtrMovedAfterEnd {
+                        program_pointer: self.program_pointer,
+                        instruction: self.program.instructions()[self.program_pointer],
+                    });
+                }
+                cli::AllocStrategy::TapeCanGrow => {
+                    // Gone past end of tape, but tape can be extended so add another cell
+                    self.tape.push(T::default());
+                }
             }
-            self.tape_size += 1;
         }
         self.data_pointer += 1;
         Ok(())
@@ -208,9 +206,41 @@ impl<'a, T: CellKind + std::clone::Clone + std::default::Default> BfTape<'a, T> 
         Ok(())
     }
 
+    // Program handling methods
+    // ########################
+
+    /// Current program pointer
+    pub fn program_pointer(&self) -> usize {
+        self.program_pointer
+    }
+
     /// The instruction at the current program pointer
     pub fn current_instruction(&self) -> &bft_types::BfInstruction {
         &self.program.instructions()[self.program_pointer]
+    }
+
+    /// Moves the program pointer forward
+    pub fn move_program_pointer_forward(&mut self) -> Result<(), BfError> {
+        if self.program_pointer == self.program.instructions().len() - 1 {
+            return Err(BfError::ProgramPtrMovedAfterEnd {
+                program_pointer: self.program_pointer,
+                instruction: self.program.instructions()[self.program_pointer],
+            });
+        }
+        self.program_pointer += 1;
+        Ok(())
+    }
+
+    /// Moves the program pointer backward
+    pub fn move_program_pointer_back(&mut self) -> Result<(), BfError> {
+        if self.program_pointer == 0 {
+            return Err(BfError::ProgramPtrMovedBeforeStart {
+                program_pointer: self.program_pointer,
+                instruction: self.program.instructions()[self.program_pointer],
+            });
+        }
+        self.program_pointer -= 1;
+        Ok(())
     }
 
     // Data value handling methods
@@ -228,14 +258,14 @@ impl<'a, T: CellKind + std::clone::Clone + std::default::Default> BfTape<'a, T> 
         Ok(())
     }
 
-    /// Get the value of the cell currently pointed to by the data pointer
-    pub fn get_data_value(&mut self) -> T {
-        self.tape[self.data_pointer].get().into()
+    /// Get the current value of the cell at the current data pointer position
+    pub fn get_data_value(&self) -> u8 {
+        self.tape[self.data_pointer].to_u8()
     }
 
-    /// Set the value of the cell currently pointed to by the data pointer
+    /// Set the current value of the cell at the current data pointer position
     pub fn set_data_value(&mut self, value: u8) {
-        self.tape[self.data_pointer].set(value)
+        self.tape[self.data_pointer] = <T as CellKind>::from_u8(value);
     }
 
     /// Output the value of the cell currently pointed to by the data pointer
@@ -261,7 +291,7 @@ impl<'a, T: CellKind + std::clone::Clone + std::default::Default> BfTape<'a, T> 
         })?;
 
         if self.debug() != cli::DebugLevelType::None {
-            println!("Data={}", data[0]);
+            println!("Data={:?}", data[0]);
         }
 
         Ok(())
@@ -290,7 +320,7 @@ impl<'a, T: CellKind + std::clone::Clone + std::default::Default> BfTape<'a, T> 
         })?;
 
         // Place the byte into the tape at the current data pointer location
-        self.set_data_value(data[0]);
+        self.tape[self.data_pointer] = T::from_u8(data[0]);
         Ok(())
     }
 
@@ -405,7 +435,7 @@ mod tests {
         let program = BfProgram::new("tiny.bf", "><+-.").unwrap();
         let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
         tape.reset_data_pointer();
-        for i in 0..100 {
+        for i in 0..99 {
             if tape.move_data_pointer_forward().is_err() {
                 panic!("The tape should have 100 cells {}", i);
             }
@@ -413,6 +443,47 @@ mod tests {
         // Now move past the end of the tape
         let result = tape.move_data_pointer_forward();
         assert!(result.is_err());
+    }
+
+    /// Test that the tape is extended when moving the data pointer after the end of the tape
+    #[test]
+    fn data_pointer_moved_after_end_and_can_grow() {
+        let program = BfProgram::new("tiny.bf", "><+-.").unwrap();
+        let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeCanGrow);
+        tape.reset_data_pointer();
+        for i in 0..99 {
+            if tape.move_data_pointer_forward().is_err() {
+                panic!("The tape should have 100 cells {}", i);
+            }
+        }
+        // Now move past the end of the tape
+        let result = tape.move_data_pointer_forward();
+        assert!(result.is_ok());
+
+        // Check that the tape is now 1 cell longer
+        assert_eq!(tape.data_pointer(), 100);
+    }
+
+    /// Test that no error is raised when moving the data pointer normally
+    #[test]
+    fn data_pointer_moved_normally() {
+        let program = BfProgram::new("tiny.bf", "><+-.").unwrap();
+        let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
+        tape.reset_data_pointer();
+
+        // Move data pointer to end
+        for _ in 0..99 {
+            let result = tape.move_data_pointer_forward();
+            assert!(result.is_ok());
+        }
+        assert_eq!(tape.data_pointer(), 99);
+
+        // Move data pointer back to beginning
+        for _ in 0..99 {
+            let result = tape.move_data_pointer_back();
+            assert!(result.is_ok());
+        }
+        assert_eq!(tape.data_pointer(), 0);
     }
 
     /// Test that the value in a cell is incremented. Also checks that data value can be read.
@@ -444,8 +515,14 @@ mod tests {
     fn output_cell_value() {
         let program = BfProgram::new("tiny.bf", "><+-.").unwrap();
         let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
+
+        // Create a writer as a sink for the value that is being output
         let mut writer = std::io::Cursor::new(Vec::new());
+
+        // Output the value from the current cell in the tape to the writer
         assert!(tape.output_value(&mut writer).is_ok());
+
+        // Check that the value was read
         assert_eq!(writer.into_inner()[0], 0);
     }
 
@@ -454,8 +531,30 @@ mod tests {
     fn input_cell_value() {
         let program = BfProgram::new("tiny.bf", "><+-.").unwrap();
         let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
+
+        // Create a reader as a source for the value that is being input
         let mut reader = std::io::Cursor::new(vec![55]);
+
+        // Input the value into the current cell in the tape
         assert!(tape.input_value(&mut reader).is_ok());
+
+        // Check that the value was written
         assert_eq!(tape.get_data_value(), 55);
+    }
+
+    /// Test that an error is raised when moving the program pointer past the end of the program
+    #[test]
+    fn program_pointer_moved_after_end() {
+        let program = BfProgram::new("tiny.bf", "><").unwrap();
+        let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
+
+        // Check that program is only two instructions
+        assert_eq!(tape.program.instructions().len(), 2);
+
+        // Move program pointer past end of program
+        let result = tape.move_program_pointer_forward();
+        assert!(result.is_ok());
+        let result = tape.move_program_pointer_forward();
+        assert!(result.is_err());
     }
 }
