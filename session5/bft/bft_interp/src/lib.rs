@@ -368,31 +368,131 @@ impl<'a, T: std::fmt::Debug + CellKind + std::clone::Clone + std::default::Defau
             match cmd {
                 bft_types::BfCommand::Comment => {}
                 bft_types::BfCommand::IncDataPointer => {
+                    if self.debug() != cli::DebugLevelType::None {
+                        println!("IncPtr at {}", self.program_pointer());
+                    }
                     self.move_data_pointer_forward()?;
                     self.program_pointer += 1;
                 }
                 bft_types::BfCommand::DecDataPointer => {
+                    if self.debug() != cli::DebugLevelType::None {
+                        println!("DecPtr at {}", self.program_pointer());
+                    }
                     self.move_data_pointer_back()?;
                     self.program_pointer += 1;
                 }
                 bft_types::BfCommand::IncValue => {
+                    if self.debug() != cli::DebugLevelType::None {
+                        println!("Inc at {}", self.program_pointer());
+                    }
                     self.increment_data_value()?;
                     self.program_pointer += 1;
                 }
                 bft_types::BfCommand::DecValue => {
+                    if self.debug() != cli::DebugLevelType::None {
+                        println!("Dec at {}", self.program_pointer());
+                    }
                     self.decrement_data_value()?;
                     self.program_pointer += 1;
                 }
                 bft_types::BfCommand::OutputValue => {
+                    if self.debug() != cli::DebugLevelType::None {
+                        println!("Output at {}", self.program_pointer());
+                    }
                     self.output_value(writer)?;
                     self.program_pointer += 1;
                 }
                 bft_types::BfCommand::InputValue => {
+                    if self.debug() != cli::DebugLevelType::None {
+                        println!("Input at {}", self.program_pointer());
+                    }
                     self.input_value(reader)?;
                     self.program_pointer += 1;
                 }
-                bft_types::BfCommand::JumpForward => {}
-                bft_types::BfCommand::JumpBackward => {}
+                bft_types::BfCommand::JumpForward => {
+                    if self.debug() != cli::DebugLevelType::None {
+                        println!("Jumping forward at {}", self.program_pointer());
+                    }
+                    if self.get_data_value() == 0 {
+                        let mut found = false;
+                        if self.debug() >= cli::DebugLevelType::Verbose {
+                            println!(
+                                "Looking for jump loc at {}",
+                                self.current_instruction().location()
+                            );
+                        }
+                        for jmp in self.program.jump_locations() {
+                            if jmp.forward().line() == self.current_instruction().location().line()
+                                && jmp.forward().offset()
+                                    == self.current_instruction().location().offset()
+                            {
+                                for (i, ins) in self.program.instructions().into_iter().enumerate()
+                                {
+                                    if ins.location().line() == jmp.backward().line()
+                                        && ins.location().offset() == jmp.backward().offset()
+                                    {
+                                        if self.debug() >= cli::DebugLevelType::Verbose {
+                                            println!("Jumping to {} at {}", i, ins.location());
+                                        }
+                                        self.program_pointer = i + 1;
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if found {
+                                break;
+                            }
+                        }
+                        if !found {
+                            panic!();
+                        }
+                    } else {
+                        self.program_pointer += 1;
+                    };
+                }
+                bft_types::BfCommand::JumpBackward => {
+                    if self.debug() != cli::DebugLevelType::None {
+                        println!("Jumping backward at {}", self.program_pointer());
+                    }
+                    if self.get_data_value() != 0 {
+                        let mut found = false;
+                        if self.debug() >= cli::DebugLevelType::Verbose {
+                            println!(
+                                "Looking for jump loc at {}",
+                                self.current_instruction().location()
+                            );
+                        }
+                        for jmp in self.program.jump_locations() {
+                            if jmp.backward().line() == self.current_instruction().location().line()
+                                && jmp.backward().offset()
+                                    == self.current_instruction().location().offset()
+                            {
+                                for (i, ins) in self.program.instructions().into_iter().enumerate()
+                                {
+                                    if ins.location().line() == jmp.forward().line()
+                                        && ins.location().offset() == jmp.forward().offset()
+                                    {
+                                        if self.debug() >= cli::DebugLevelType::Verbose {
+                                            println!("Jumping to {} at {}", i, ins.location());
+                                        }
+                                        self.program_pointer = i + 1;
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if found {
+                                break;
+                            }
+                        }
+                        if !found {
+                            panic!();
+                        }
+                    } else {
+                        self.program_pointer += 1;
+                    };
+                }
             };
         }
         Ok(())
