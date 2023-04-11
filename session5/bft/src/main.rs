@@ -35,8 +35,12 @@ fn run_bft(args: &cli::Args) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Create a tape for the program to be used by the interpreter
-    let mut tape: bft_interp::BfTape<u8> =
-        bft_interp::BfTape::new(&program, args.cell_count(), args.extensible());
+    let mut tape: bft_interp::BfTape<u8> = bft_interp::BfTape::new(
+        &program,
+        args.cell_count(),
+        args.extensible(),
+        args.output_format(),
+    );
     tape.set_debug(args.debug());
 
     // And run the interpreter
@@ -57,6 +61,7 @@ fn run_bft(args: &cli::Args) -> Result<(), Box<dyn std::error::Error>> {
 /// Various options can be specified. They are
 /// * -c \<cells\>  - Specify the number of cells in the BF program's tape. The default is 30,000.
 /// * -e          - Allows the tape to grow as necessary. If not specified the tape is fixed in size.
+/// * -a          - ASCII output. Use for hello-world.bf. Without this option, values are output as numbers.
 /// * -d          - Debug output. Multiple occurences of this option increase the amount of debug information that is output.
 /// * -h          - Help
 /// * -V          - Version

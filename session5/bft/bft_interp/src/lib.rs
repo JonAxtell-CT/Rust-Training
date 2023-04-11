@@ -1,4 +1,5 @@
 use bft_types::BfProgram;
+use cli::OutputFormat;
 use std::io::{Read, Write};
 use thiserror::Error;
 
@@ -124,6 +125,8 @@ pub struct BfTape<'a, T> {
     data_pointer: usize,
     /// Indicates if more memory can be allocated from it's initial size or if it is fixed
     alloc_strategy: cli::AllocStrategy,
+    /// Output format
+    output_format: cli::OutputFormat,
     /// The tape itself
     tape: Vec<T>,
     /// Debug flag
@@ -144,12 +147,14 @@ impl<'a, T: CellKind + std::clone::Clone + std::default::Default + std::fmt::Deb
         program: &'a BfProgram,
         tape_size: usize,
         alloc_strategy: cli::AllocStrategy,
+        output_format: cli::OutputFormat,
     ) -> Self {
         Self {
             program_pointer: 0,
             program,
             data_pointer: 0,
             alloc_strategy,
+            output_format,
             tape: if tape_size == 0 {
                 vec![Default::default(); MAX_TAPE_SIZE]
             } else {
@@ -231,18 +236,6 @@ impl<'a, T: CellKind + std::clone::Clone + std::default::Default + std::fmt::Deb
         Ok(())
     }
 
-    /// Moves the program pointer backward
-    pub fn move_program_pointer_back(&mut self) -> Result<(), BfError> {
-        if self.program_pointer == 0 {
-            return Err(BfError::ProgramPtrMovedBeforeStart {
-                program_pointer: self.program_pointer,
-                instruction: self.program.instructions()[self.program_pointer],
-            });
-        }
-        self.program_pointer -= 1;
-        Ok(())
-    }
-
     // Data value handling methods
     // ###########################
 
@@ -273,22 +266,35 @@ impl<'a, T: CellKind + std::clone::Clone + std::default::Default + std::fmt::Deb
     /// Example usage:
     /// ```
     ///     let program = bft_types::BfProgram::new(&"tiny.bf", "><+-.").unwrap();
-    ///     let mut tape: bft_interp::BfTape<u8> = bft_interp::BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
+    ///     let mut tape: bft_interp::BfTape<u8> =
+    ///                         bft_interp::BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed, cli::OutputFormat::BinaryOutput);
     ///     let mut writer = std::io::Cursor::new(Vec::new());
     ///     assert_eq!(tape.output_value(&mut writer).is_ok(), true);
-    ///     assert_eq!(writer.into_inner()[0], 0);
+    ///     assert_eq!(writer.into_inner()[0], 48);
     /// ```
     pub fn output_value<W: Write>(&mut self, writer: &mut W) -> Result<(), BfError> {
         // Get the value of the cell in the tape at the current data pointer location
         let data = [self.tape[self.data_pointer].to_u8(); 1];
 
-        // Write to where ever it's going, handling any i/o errors
-        writer.write(&data).map_err(|e| BfError::IOError {
-            error_msg: e,
-            filepath: self.program.filename().to_path_buf(),
-            instruction: self.program.instructions()[self.program_pointer],
-            program_pointer: self.program_pointer,
-        })?;
+        // Write to where ever it's going, handling any i/o errors.
+        // Also
+        if self.output_format == OutputFormat::BinaryOutput {
+            let mut num = data[0].to_string();
+            num += ",";
+            writer.write(num.as_bytes()).map_err(|e| BfError::IOError {
+                error_msg: e,
+                filepath: self.program.filename().to_path_buf(),
+                instruction: self.program.instructions()[self.program_pointer],
+                program_pointer: self.program_pointer,
+            })?;
+        } else {
+            writer.write(&data).map_err(|e| BfError::IOError {
+                error_msg: e,
+                filepath: self.program.filename().to_path_buf(),
+                instruction: self.program.instructions()[self.program_pointer],
+                program_pointer: self.program_pointer,
+            })?;
+        }
 
         if self.debug() != cli::DebugLevelType::None {
             println!("Data={:?}", data[0]);
@@ -302,7 +308,8 @@ impl<'a, T: CellKind + std::clone::Clone + std::default::Default + std::fmt::Deb
     /// Example usage:
     /// ```
     ///     let program = bft_types::BfProgram::new(&"tiny.bf", "><+-.").unwrap();
-    ///     let mut tape: bft_interp::BfTape<u8> = bft_interp::BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
+    ///     let mut tape: bft_interp::BfTape<u8> =
+    ///                             bft_interp::BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed, cli::OutputFormat::BinaryOutput);
     ///     let mut reader = std::io::Cursor::new(vec![55]);
     ///     assert_eq!(tape.input_value(&mut reader).is_ok(), true);
     ///     assert_eq!(tape.get_data_value(), 55);
@@ -359,9 +366,6 @@ impl<'a, T: std::fmt::Debug + CellKind + std::clone::Clone + std::default::Defau
         }
 
         // Execute the program.
-
-        // Note: This doesn't work properly at the moment since the jump instructions
-        // haven't been implemented.
         while self.program_pointer != self.program.instructions().len() {
             let inst = self.program.instructions()[self.program_pointer];
             let cmd = inst.command();
@@ -372,42 +376,36 @@ impl<'a, T: std::fmt::Debug + CellKind + std::clone::Clone + std::default::Defau
                         println!("IncPtr at {}", self.program_pointer());
                     }
                     self.move_data_pointer_forward()?;
-                    self.program_pointer += 1;
                 }
                 bft_types::BfCommand::DecDataPointer => {
                     if self.debug() != cli::DebugLevelType::None {
                         println!("DecPtr at {}", self.program_pointer());
                     }
                     self.move_data_pointer_back()?;
-                    self.program_pointer += 1;
                 }
                 bft_types::BfCommand::IncValue => {
                     if self.debug() != cli::DebugLevelType::None {
                         println!("Inc at {}", self.program_pointer());
                     }
                     self.increment_data_value()?;
-                    self.program_pointer += 1;
                 }
                 bft_types::BfCommand::DecValue => {
                     if self.debug() != cli::DebugLevelType::None {
                         println!("Dec at {}", self.program_pointer());
                     }
                     self.decrement_data_value()?;
-                    self.program_pointer += 1;
                 }
                 bft_types::BfCommand::OutputValue => {
                     if self.debug() != cli::DebugLevelType::None {
                         println!("Output at {}", self.program_pointer());
                     }
                     self.output_value(writer)?;
-                    self.program_pointer += 1;
                 }
                 bft_types::BfCommand::InputValue => {
                     if self.debug() != cli::DebugLevelType::None {
                         println!("Input at {}", self.program_pointer());
                     }
                     self.input_value(reader)?;
-                    self.program_pointer += 1;
                 }
                 bft_types::BfCommand::JumpForward => {
                     if self.debug() != cli::DebugLevelType::None {
@@ -426,15 +424,14 @@ impl<'a, T: std::fmt::Debug + CellKind + std::clone::Clone + std::default::Defau
                                 && jmp.forward().offset()
                                     == self.current_instruction().location().offset()
                             {
-                                for (i, ins) in self.program.instructions().into_iter().enumerate()
-                                {
+                                for (i, ins) in self.program.instructions().iter().enumerate() {
                                     if ins.location().line() == jmp.backward().line()
                                         && ins.location().offset() == jmp.backward().offset()
                                     {
                                         if self.debug() >= cli::DebugLevelType::Verbose {
                                             println!("Jumping to {} at {}", i, ins.location());
                                         }
-                                        self.program_pointer = i + 1;
+                                        self.program_pointer = i; // +1 is added after every instruction
                                         found = true;
                                         break;
                                     }
@@ -447,8 +444,6 @@ impl<'a, T: std::fmt::Debug + CellKind + std::clone::Clone + std::default::Defau
                         if !found {
                             panic!();
                         }
-                    } else {
-                        self.program_pointer += 1;
                     };
                 }
                 bft_types::BfCommand::JumpBackward => {
@@ -468,15 +463,14 @@ impl<'a, T: std::fmt::Debug + CellKind + std::clone::Clone + std::default::Defau
                                 && jmp.backward().offset()
                                     == self.current_instruction().location().offset()
                             {
-                                for (i, ins) in self.program.instructions().into_iter().enumerate()
-                                {
+                                for (i, ins) in self.program.instructions().iter().enumerate() {
                                     if ins.location().line() == jmp.forward().line()
                                         && ins.location().offset() == jmp.forward().offset()
                                     {
                                         if self.debug() >= cli::DebugLevelType::Verbose {
                                             println!("Jumping to {} at {}", i, ins.location());
                                         }
-                                        self.program_pointer = i + 1;
+                                        self.program_pointer = i; // +1 is added after every instruction
                                         found = true;
                                         break;
                                     }
@@ -489,12 +483,12 @@ impl<'a, T: std::fmt::Debug + CellKind + std::clone::Clone + std::default::Defau
                         if !found {
                             panic!();
                         }
-                    } else {
-                        self.program_pointer += 1;
                     };
                 }
             };
+            self.program_pointer += 1;
         }
+        println!();
         Ok(())
     }
 }
@@ -507,7 +501,12 @@ mod tests {
     #[test]
     fn new_default_size() {
         let program = BfProgram::new("tiny.bf", "><+-.").unwrap();
-        let tape: BfTape<u8> = BfTape::new(&program, 0, cli::AllocStrategy::TapeIsFixed);
+        let tape: BfTape<u8> = BfTape::new(
+            &program,
+            0,
+            cli::AllocStrategy::TapeIsFixed,
+            cli::OutputFormat::BinaryOutput,
+        );
         assert_eq!(tape.tape.capacity(), MAX_TAPE_SIZE);
     }
 
@@ -515,14 +514,24 @@ mod tests {
     #[test]
     fn new_size_of_10000() {
         let program = BfProgram::new("tiny.bf", "><+-.").unwrap();
-        let _tape: BfTape<u8> = BfTape::new(&program, 10000, cli::AllocStrategy::TapeIsFixed);
+        let _tape: BfTape<u8> = BfTape::new(
+            &program,
+            10000,
+            cli::AllocStrategy::TapeIsFixed,
+            cli::OutputFormat::BinaryOutput,
+        );
     }
 
     /// Test that an error is raised when moving the data pointer before the start of the tape
     #[test]
     fn data_pointer_moved_before_start() {
         let program = BfProgram::new("tiny.bf", "><+-.").unwrap();
-        let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
+        let mut tape: BfTape<u8> = BfTape::new(
+            &program,
+            100,
+            cli::AllocStrategy::TapeIsFixed,
+            cli::OutputFormat::BinaryOutput,
+        );
         tape.reset_data_pointer();
         // Now move the before the beginning of the tape
         let result = tape.move_data_pointer_back();
@@ -533,7 +542,12 @@ mod tests {
     #[test]
     fn data_pointer_moved_after_end() {
         let program = BfProgram::new("tiny.bf", "><+-.").unwrap();
-        let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
+        let mut tape: BfTape<u8> = BfTape::new(
+            &program,
+            100,
+            cli::AllocStrategy::TapeIsFixed,
+            cli::OutputFormat::BinaryOutput,
+        );
         tape.reset_data_pointer();
         for i in 0..99 {
             if tape.move_data_pointer_forward().is_err() {
@@ -549,7 +563,12 @@ mod tests {
     #[test]
     fn data_pointer_moved_after_end_and_can_grow() {
         let program = BfProgram::new("tiny.bf", "><+-.").unwrap();
-        let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeCanGrow);
+        let mut tape: BfTape<u8> = BfTape::new(
+            &program,
+            100,
+            cli::AllocStrategy::TapeCanGrow,
+            cli::OutputFormat::BinaryOutput,
+        );
         tape.reset_data_pointer();
         for i in 0..99 {
             if tape.move_data_pointer_forward().is_err() {
@@ -568,7 +587,12 @@ mod tests {
     #[test]
     fn data_pointer_moved_normally() {
         let program = BfProgram::new("tiny.bf", "><+-.").unwrap();
-        let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
+        let mut tape: BfTape<u8> = BfTape::new(
+            &program,
+            100,
+            cli::AllocStrategy::TapeIsFixed,
+            cli::OutputFormat::BinaryOutput,
+        );
         tape.reset_data_pointer();
 
         // Move data pointer to end
@@ -590,7 +614,12 @@ mod tests {
     #[test]
     fn increment_cell_value() {
         let program = BfProgram::new("increment.bf", "+").unwrap();
-        let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
+        let mut tape: BfTape<u8> = BfTape::new(
+            &program,
+            100,
+            cli::AllocStrategy::TapeIsFixed,
+            cli::OutputFormat::BinaryOutput,
+        );
         tape.reset_data_pointer();
         tape.increment_data_value().unwrap();
 
@@ -602,7 +631,12 @@ mod tests {
     #[test]
     fn decrement_cell_value() {
         let program = BfProgram::new("decrement.bf", "-").unwrap();
-        let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
+        let mut tape: BfTape<u8> = BfTape::new(
+            &program,
+            100,
+            cli::AllocStrategy::TapeIsFixed,
+            cli::OutputFormat::BinaryOutput,
+        );
         tape.reset_data_pointer();
         tape.decrement_data_value().unwrap();
 
@@ -614,7 +648,12 @@ mod tests {
     #[test]
     fn output_cell_value() {
         let program = BfProgram::new("tiny.bf", "><+-.").unwrap();
-        let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
+        let mut tape: BfTape<u8> = BfTape::new(
+            &program,
+            100,
+            cli::AllocStrategy::TapeIsFixed,
+            cli::OutputFormat::BinaryOutput,
+        );
 
         // Create a writer as a sink for the value that is being output
         let mut writer = std::io::Cursor::new(Vec::new());
@@ -622,15 +661,20 @@ mod tests {
         // Output the value from the current cell in the tape to the writer
         assert!(tape.output_value(&mut writer).is_ok());
 
-        // Check that the value was read
-        assert_eq!(writer.into_inner()[0], 0);
+        // Check that the value was output correctly, as "0"
+        assert_eq!(writer.into_inner()[0], 48);
     }
 
     /// Test that input  works
     #[test]
     fn input_cell_value() {
         let program = BfProgram::new("tiny.bf", "><+-.").unwrap();
-        let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
+        let mut tape: BfTape<u8> = BfTape::new(
+            &program,
+            100,
+            cli::AllocStrategy::TapeIsFixed,
+            cli::OutputFormat::BinaryOutput,
+        );
 
         // Create a reader as a source for the value that is being input
         let mut reader = std::io::Cursor::new(vec![55]);
@@ -646,7 +690,12 @@ mod tests {
     #[test]
     fn program_pointer_moved_after_end() {
         let program = BfProgram::new("tiny.bf", "><").unwrap();
-        let mut tape: BfTape<u8> = BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed);
+        let mut tape: BfTape<u8> = BfTape::new(
+            &program,
+            100,
+            cli::AllocStrategy::TapeIsFixed,
+            cli::OutputFormat::BinaryOutput,
+        );
 
         // Check that program is only two instructions
         assert_eq!(tape.program.instructions().len(), 2);

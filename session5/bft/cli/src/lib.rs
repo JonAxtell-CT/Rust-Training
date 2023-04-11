@@ -17,6 +17,21 @@ pub enum AllocStrategy {
     TapeIsFixed,
 }
 
+/// Output format for data cell values.
+///
+/// When data cells are output they can be interpreted as ASCII or binary values.
+///
+/// * AsciiOutput
+/// * BinaryOutput
+///
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum OutputFormat {
+    /// Values are converted into an ASCII character when a data cell's value is output
+    AsciiOutput,
+    /// Values are output as is with commas separating values
+    BinaryOutput,
+}
+
 /// Debug levels
 ///
 /// Enumerated levels to indicate the verbosity of the debug output rather
@@ -60,6 +75,9 @@ pub struct Args {
     /// Number of cells, must be non-zero. The default is 30,000 if not specified
     cells: usize,
 
+    /// Output format
+    output_format: OutputFormat,
+
     /// Enable tape to auto-extend from the initial size
     extensible: AllocStrategy,
 
@@ -89,12 +107,17 @@ impl Args {
                     .value_parser(clap::value_parser!(u32).range(1..)),
             )
             .arg(
-                arg!(-e --extensible "Tape can grow")
+                arg!(-e --extensible "Tape can grow beyond the initial size")
                     .default_value("false")
                     .required(false),
             )
             .arg(
-                arg!(-d --debug "Debug")
+                arg!(-a --ascii "Output values as ASCII characters rather than binary")
+                    .default_value("false")
+                    .required(false),
+            )
+            .arg(
+                arg!(-d --debug "Debug. Multiple occurrences will increase verbosity")
                     .required(false)
                     .action(clap::ArgAction::Count),
             )
@@ -113,6 +136,13 @@ impl Args {
         };
         println!("Extensible is {:?}", extensible);
 
+        let output_format = if *matches.get_one::<bool>("ascii").unwrap() {
+            OutputFormat::AsciiOutput
+        } else {
+            OutputFormat::BinaryOutput
+        };
+        println!("Output format is {:?}", output_format);
+
         let debug = matches.get_count("debug");
         println!("Debug is {:?}", debug);
 
@@ -120,6 +150,7 @@ impl Args {
             program: program_name.into(),
             cells: *cells as usize,
             extensible,
+            output_format,
             debug,
         }
     }
@@ -139,6 +170,13 @@ impl Args {
     /// * TapeIsFixed doesn't allow the amount of memory used to store the tape to be reallocated.
     pub fn extensible(&self) -> AllocStrategy {
         self.extensible
+    }
+
+    /// Flag indicating how values are output
+    /// * AsciiOutput causes values to be converted into ASCII characters. Useful for running hello-world.bf
+    /// * BinaryOutput causes values to be output as is
+    pub fn output_format(&self) -> OutputFormat {
+        self.output_format
     }
 
     /// Flag indicating the amount of debug to output
