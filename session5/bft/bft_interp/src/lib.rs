@@ -39,16 +39,6 @@ pub enum BfError {
         instruction: bft_types::BfInstruction,
         program_pointer: usize,
     },
-    /// Error to indicate when the program pointer was moved before the start of the program
-    #[error(
-        "Error: Program pointer moved before start of program at {} {}",
-        program_pointer,
-        instruction
-    )]
-    ProgramPtrMovedBeforeStart {
-        instruction: bft_types::BfInstruction,
-        program_pointer: usize,
-    },
     /// Error the occurs when reading/writing using the input/output functionality of the tape
     #[error(
         "Error: I/O error {} at {} {} {}",
@@ -107,7 +97,7 @@ impl CellKind for u8 {
         *self
     }
 
-    /// Convert the value of a data cell from u8
+    /// Set the value of a data cell from u8
     fn from_u8(value: u8) -> Self {
         value
     }
@@ -177,6 +167,11 @@ impl<'a, T: CellKind + std::clone::Clone + std::default::Default + std::fmt::Deb
         self.data_pointer = 0;
     }
 
+    /// Length of data tape
+    pub fn data_length(&self) -> usize {
+        self.tape.len()
+    }
+
     /// Moves the data pointer forward
     pub fn move_data_pointer_forward(&mut self) -> Result<(), BfError> {
         if self.data_pointer == self.tape.len() - 1 {
@@ -208,31 +203,6 @@ impl<'a, T: CellKind + std::clone::Clone + std::default::Default + std::fmt::Deb
             });
         }
         self.data_pointer -= 1;
-        Ok(())
-    }
-
-    // Program handling methods
-    // ########################
-
-    /// Current program pointer
-    pub fn program_pointer(&self) -> usize {
-        self.program_pointer
-    }
-
-    /// The instruction at the current program pointer
-    pub fn current_instruction(&self) -> &bft_types::BfInstruction {
-        &self.program.instructions()[self.program_pointer]
-    }
-
-    /// Moves the program pointer forward
-    pub fn move_program_pointer_forward(&mut self) -> Result<(), BfError> {
-        if self.program_pointer == self.program.instructions().len() - 1 {
-            return Err(BfError::ProgramPtrMovedAfterEnd {
-                program_pointer: self.program_pointer,
-                instruction: self.program.instructions()[self.program_pointer],
-            });
-        }
-        self.program_pointer += 1;
         Ok(())
     }
 
@@ -328,6 +298,31 @@ impl<'a, T: CellKind + std::clone::Clone + std::default::Default + std::fmt::Deb
 
         // Place the byte into the tape at the current data pointer location
         self.tape[self.data_pointer] = T::from_u8(data[0]);
+        Ok(())
+    }
+
+    // Program handling methods
+    // ########################
+
+    /// Current program pointer
+    pub fn program_pointer(&self) -> usize {
+        self.program_pointer
+    }
+
+    /// The instruction at the current program pointer
+    pub fn current_instruction(&self) -> &bft_types::BfInstruction {
+        &self.program.instructions()[self.program_pointer]
+    }
+
+    /// Moves the program pointer forward
+    pub fn move_program_pointer_forward(&mut self) -> Result<(), BfError> {
+        if self.program_pointer == self.program.instructions().len() - 1 {
+            return Err(BfError::ProgramPtrMovedAfterEnd {
+                program_pointer: self.program_pointer,
+                instruction: self.program.instructions()[self.program_pointer],
+            });
+        }
+        self.program_pointer += 1;
         Ok(())
     }
 
@@ -507,19 +502,20 @@ mod tests {
             cli::AllocStrategy::TapeIsFixed,
             cli::OutputFormat::BinaryOutput,
         );
-        assert_eq!(tape.tape.capacity(), MAX_TAPE_SIZE);
+        assert_eq!(tape.data_length(), MAX_TAPE_SIZE);
     }
 
     /// Test for a valid size of the normal base type.
     #[test]
     fn new_size_of_10000() {
         let program = BfProgram::new("tiny.bf", "><+-.").unwrap();
-        let _tape: BfTape<u8> = BfTape::new(
+        let tape: BfTape<u8> = BfTape::new(
             &program,
             10000,
             cli::AllocStrategy::TapeIsFixed,
             cli::OutputFormat::BinaryOutput,
         );
+        assert_eq!(tape.data_length(), 10000);
     }
 
     /// Test that an error is raised when moving the data pointer before the start of the tape
@@ -646,7 +642,7 @@ mod tests {
 
     /// Test that output works
     #[test]
-    fn output_cell_value() {
+    fn output_cell_value_as_binary() {
         let program = BfProgram::new("tiny.bf", "><+-.").unwrap();
         let mut tape: BfTape<u8> = BfTape::new(
             &program,
@@ -665,6 +661,27 @@ mod tests {
         assert_eq!(writer.into_inner()[0], 48);
     }
 
+    /// Test that output as ascii works
+    #[test]
+    fn output_cell_value_as_ascii() {
+        let program = BfProgram::new("tiny.bf", "><+-.").unwrap();
+        let mut tape: BfTape<u8> = BfTape::new(
+            &program,
+            100,
+            cli::AllocStrategy::TapeIsFixed,
+            cli::OutputFormat::AsciiOutput,
+        );
+
+        // Create a writer as a sink for the value that is being output
+        let mut writer = std::io::Cursor::new(Vec::new());
+
+        // Output the value from the current cell in the tape to the writer
+        assert!(tape.output_value(&mut writer).is_ok());
+
+        // Check that the value was output correctly, as 0 (null character)
+        assert_eq!(writer.into_inner()[0], 0);
+    }
+
     /// Test that input  works
     #[test]
     fn input_cell_value() {
@@ -677,13 +694,23 @@ mod tests {
         );
 
         // Create a reader as a source for the value that is being input
-        let mut reader = std::io::Cursor::new(vec![55]);
+        let mut reader = std::io::Cursor::new(vec![55, 11, 22]);
 
         // Input the value into the current cell in the tape
+        tape.reset_data_pointer();
+        assert!(tape.input_value(&mut reader).is_ok());
+        assert!(tape.move_data_pointer_forward().is_ok());
+        assert!(tape.input_value(&mut reader).is_ok());
+        assert!(tape.move_data_pointer_forward().is_ok());
         assert!(tape.input_value(&mut reader).is_ok());
 
-        // Check that the value was written
+        // Check that the values were written
+        tape.reset_data_pointer();
         assert_eq!(tape.get_data_value(), 55);
+        assert!(tape.move_data_pointer_forward().is_ok());
+        assert_eq!(tape.get_data_value(), 11);
+        assert!(tape.move_data_pointer_forward().is_ok());
+        assert_eq!(tape.get_data_value(), 22);
     }
 
     /// Test that an error is raised when moving the program pointer past the end of the program

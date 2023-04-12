@@ -133,9 +133,9 @@ impl BfInstruction {
     /// Create a new BF instruction.
     ///
     /// Usage:
-    /// ``
+    /// ```!no_run
     /// instructions.push(BfInstruction::new(command, line_no, char_pos));
-    /// ``
+    /// ```
     pub fn new(command: BfCommand, line: usize, offset: usize) -> Self {
         Self {
             command,
@@ -148,7 +148,7 @@ impl BfInstruction {
         self.command
     }
 
-    // The location (line and offset) the BF command was read from.
+    /// The location (line and offset) the BF command was read from.
     pub fn location(&self) -> BfLocation {
         self.location
     }
@@ -222,18 +222,18 @@ impl fmt::Display for BfJumpLocation {
 ///
 /// To read a BF program from a file use the from_file method.
 ///
-/// ``
+/// ```!no_run
 /// let program =
 ///     bft_types::BfProgram::from_file(&env::args().nth(1).ok_or("You didn't specify a file")?)?;
-/// ``
+/// ```
 ///
 /// Use the instructions method to access the BF commands.
 ///
-/// ``
+/// ```!no_run
 /// for inst in program.instructions() {
 ///     println!("{:?}", inst);
 /// }
-/// ``
+/// ```
 #[derive(Debug)]
 pub struct BfProgram {
     /// The program file
@@ -278,10 +278,9 @@ impl BfProgram {
     /// Example:
     ///
     /// ```no_run
-    /// use bft_types::BfProgram;
     /// let filename:String = std::env::args().nth(1).ok_or("No file").unwrap();
     /// let content:String = std::fs::read_to_string::<&String>(&filename).unwrap();
-    /// let program = BfProgram::new(filename, &content).unwrap();
+    /// let program = bft_types::BfProgram::new(filename, &content).unwrap();
     /// ```
     pub fn new(filename: impl AsRef<Path>, content: &str) -> std::io::Result<Self> {
         let mut instructions = Vec::new();
@@ -311,8 +310,7 @@ impl BfProgram {
     /// Example:
     ///
     /// ```no_run
-    /// use bft_types::BfProgram;
-    /// let program = BfProgram::from_file(&"hello-world.bf");
+    /// let program = bft_types::BfProgram::from_file(&"hello-world.bf");
     /// for inst in program.expect("Opps").instructions() {
     ///    println!("{:?}", inst);
     /// }
