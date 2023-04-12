@@ -11,7 +11,7 @@ const MAX_TAPE_SIZE: usize = 30000;
 pub enum BfError {
     /// Error to indicate when the data pointer was moved before the start of the tape
     #[error(
-        "Error: Data pointer moved before start of tape at {} {}",
+        "Data pointer moved before start of tape at {} {}",
         program_pointer,
         instruction
     )]
@@ -21,7 +21,7 @@ pub enum BfError {
     },
     /// Error to indicate when the data pointer was moved after the end of the tape
     #[error(
-        "Error: Data pointer moved after end of tape at {} {}",
+        "Data pointer moved after end of tape at {} {}",
         program_pointer,
         instruction
     )]
@@ -31,7 +31,7 @@ pub enum BfError {
     },
     /// Error to indicate when the program pointer was moved after the end of the program
     #[error(
-        "Error: Program pointer moved after end of program at {} {}",
+        "Program pointer moved after end of program at {} {}",
         program_pointer,
         instruction
     )]
@@ -40,11 +40,11 @@ pub enum BfError {
         program_pointer: usize,
     },
     /// Error to indicate a problem with the brackets when jumping forward or back
-    #[error("Error: Issue with brackets at {}", program_pointer)]
+    #[error("Issue with brackets at {}", program_pointer)]
     BracketNotFound { program_pointer: usize },
     /// Error the occurs when reading/writing using the input/output functionality of the tape
     #[error(
-        "Error: I/O error {} at {} {} {}",
+        "I/O error {} at {} {} {}",
         error_msg,
         filepath.display(),
         instruction,
@@ -269,7 +269,7 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
             })?;
         }
 
-        if self.debug() != cli::DebugLevelType::None {
+        if self.debug() >= cli::DebugLevelType::Verbose {
             println!("Data={:?}", data[0]);
         }
 
@@ -288,19 +288,28 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
     ///     assert_eq!(tape.get_data_value(), 55);
     /// ```
     pub fn input_value<R: Read>(&mut self, reader: &mut R) -> Result<(), BfError> {
-        // Provide a place to put the byte read in
+        // Provide a place to put the byte read in. Only one character at a time is read
         let mut data = [0; 1];
 
         // Read the byte in, handling any i/o errors
-        reader.read(&mut data).map_err(|e| BfError::IOError {
+        let n = reader.read(&mut data).map_err(|e| BfError::IOError {
             error_msg: e,
             filepath: self.program.filename().to_path_buf(),
             instruction: self.program.instructions()[self.program_pointer],
             program_pointer: self.program_pointer,
         })?;
 
-        // Place the byte into the tape at the current data pointer location
-        self.tape[self.data_pointer] = T::from_u8(data[0]);
+        if self.debug() >= cli::DebugLevelType::Verbose {
+            println!("Data={:?}", data[0]);
+        }
+
+        if n == 0 {
+            // End of file, use special value of 0 which is how rot13.bf program knows when to terminate
+            self.tape[self.data_pointer] = T::from_u8(u8::MAX);
+        } else {
+            // Place the byte into the tape at the current data pointer location
+            self.tape[self.data_pointer] = T::from_u8(data[0]);
+        }
         Ok(())
     }
 
