@@ -128,7 +128,7 @@ pub struct BfTape<'a, T> {
 
 /// Implementation of the BF program's tape
 ///
-impl<'a, T: CellKind + std::clone::Clone + std::default::Default + std::fmt::Debug> BfTape<'a, T> {
+impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
     /// Create a new tape for BF instructions.
     ///
     /// The BF program is passed in for reference purposes.
