@@ -39,6 +39,12 @@ pub enum BfError {
         instruction: bft_types::BfInstruction,
         program_pointer: usize,
     },
+    /// Error to indicate a problem with the brackets when jumping forward or back
+    #[error("Error: Issue with brackets at {} {}", program_pointer, instruction)]
+    BracketNotFound {
+        instruction: bft_types::BfInstruction,
+        program_pointer: usize,
+    },
     /// Error the occurs when reading/writing using the input/output functionality of the tape
     #[error(
         "Error: I/O error {} at {} {} {}",
@@ -407,6 +413,7 @@ impl<'a, T: std::fmt::Debug + CellKind + std::clone::Clone + std::default::Defau
                         println!("Jumping forward at {}", self.program_pointer());
                     }
                     if self.get_data_value() == 0 {
+                        // Condition satisfied for jump forward, find the matching bracket
                         let mut found = false;
                         if self.debug() >= cli::DebugLevelType::Verbose {
                             println!(
@@ -419,6 +426,9 @@ impl<'a, T: std::fmt::Debug + CellKind + std::clone::Clone + std::default::Defau
                                 && jmp.forward().offset()
                                     == self.current_instruction().location().offset()
                             {
+                                // Matching bracket found, now find it's place in the program
+                                // by checking the line and char offset as the program vector
+                                // does not link 1-to-1 with the source file.
                                 for (i, ins) in self.program.instructions().iter().enumerate() {
                                     if ins.location().line() == jmp.backward().line()
                                         && ins.location().offset() == jmp.backward().offset()
@@ -437,7 +447,10 @@ impl<'a, T: std::fmt::Debug + CellKind + std::clone::Clone + std::default::Defau
                             }
                         }
                         if !found {
-                            panic!();
+                            return Err(BfError::BracketNotFound {
+                                instruction: inst,
+                                program_pointer: self.program_pointer,
+                            });
                         }
                     };
                 }
@@ -446,6 +459,7 @@ impl<'a, T: std::fmt::Debug + CellKind + std::clone::Clone + std::default::Defau
                         println!("Jumping backward at {}", self.program_pointer());
                     }
                     if self.get_data_value() != 0 {
+                        // Condition satisfied for jump back, find the matching bracket
                         let mut found = false;
                         if self.debug() >= cli::DebugLevelType::Verbose {
                             println!(
@@ -458,6 +472,9 @@ impl<'a, T: std::fmt::Debug + CellKind + std::clone::Clone + std::default::Defau
                                 && jmp.backward().offset()
                                     == self.current_instruction().location().offset()
                             {
+                                // Matching bracket found, now find it's place in the program
+                                // by checking the line and char offset as the program vector
+                                // does not link 1-to-1 with the source file.
                                 for (i, ins) in self.program.instructions().iter().enumerate() {
                                     if ins.location().line() == jmp.forward().line()
                                         && ins.location().offset() == jmp.forward().offset()
@@ -476,14 +493,19 @@ impl<'a, T: std::fmt::Debug + CellKind + std::clone::Clone + std::default::Defau
                             }
                         }
                         if !found {
-                            panic!();
+                            return Err(BfError::BracketNotFound {
+                                instruction: inst,
+                                program_pointer: self.program_pointer,
+                            });
                         }
                     };
                 }
             };
+
+            // Update program pointer, even after jumps
             self.program_pointer += 1;
         }
-        println!();
+        println!(); // To ensure that shell prompt is on new line if no debug used and values were output
         Ok(())
     }
 }
