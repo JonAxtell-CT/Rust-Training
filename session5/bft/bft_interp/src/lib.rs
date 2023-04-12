@@ -176,7 +176,7 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
     }
 
     /// Moves the data pointer forward
-    pub fn move_data_pointer_forward(&mut self) -> Result<(), BfError> {
+    fn move_data_pointer_forward(&mut self) -> Result<(), BfError> {
         if self.data_pointer == self.tape.len() - 1 {
             // The data pointer is at the end of the tape, we can either abort the BF program
             // or extend the tape.
@@ -198,7 +198,7 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
     }
 
     /// Moves the data pointer backward
-    pub fn move_data_pointer_back(&mut self) -> Result<(), BfError> {
+    fn move_data_pointer_back(&mut self) -> Result<(), BfError> {
         if self.data_pointer == 0 {
             return Err(BfError::DataPtrMovedBeforeStart {
                 program_pointer: self.program_pointer,
@@ -213,13 +213,13 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
     // ###########################
 
     /// Increment the value of the cell currently pointed to by the data pointer
-    pub fn increment_data_value(&mut self) -> Result<(), BfError> {
+    fn increment_data_value(&mut self) -> Result<(), BfError> {
         self.tape[self.data_pointer] = self.tape[self.data_pointer].inc();
         Ok(())
     }
 
     /// Decrement the value of the cell currently pointed to by the data pointer
-    pub fn decrement_data_value(&mut self) -> Result<(), BfError> {
+    fn decrement_data_value(&mut self) -> Result<(), BfError> {
         self.tape[self.data_pointer] = self.tape[self.data_pointer].dec();
         Ok(())
     }
@@ -317,12 +317,12 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
     // ########################
 
     /// Current program pointer
-    pub fn program_pointer(&self) -> usize {
+    fn program_pointer(&self) -> usize {
         self.program_pointer
     }
 
     /// The instruction at the current program pointer
-    pub fn current_instruction(&self) -> bft_types::BfInstruction {
+    fn current_instruction(&self) -> bft_types::BfInstruction {
         self.program.instructions()[self.program_pointer]
     }
 
@@ -341,7 +341,7 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
     /// Jump forward to the matching bracket if the value at the current data pointer is zero
     // TODO: Uses a brute force method of finding the matching brackets. Have found a crate
     // that can help called BiMap which should make the matching up easier.
-    pub fn jump_forward(&mut self) -> Result<(), BfError> {
+    fn jump_forward(&mut self) -> Result<(), BfError> {
         if self.get_data_value() == 0 {
             // Condition satisfied for jump forward, find the matching bracket
             let mut found = false;
@@ -388,7 +388,7 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
     /// Jump backward to the matching bracket if the value at the current data pointer is non-zero
     // TODO: Uses a brute force method of finding the matching brackets. Have found a crate
     // that can help called BiMap which should make the matching up easier.
-    pub fn jump_backward(&mut self) -> Result<(), BfError> {
+    fn jump_backward(&mut self) -> Result<(), BfError> {
         if self.get_data_value() != 0 {
             // Condition satisfied for jump back, find the matching bracket
             let mut found = false;
@@ -646,6 +646,22 @@ mod tests {
             assert!(result.is_ok());
         }
         assert_eq!(tape.data_pointer(), 0);
+    }
+
+    /// Test that the value in a cell is set
+    #[test]
+    fn set_cell_value() {
+        let program = BfProgram::new("tiny.bf", "+-").unwrap();
+        let mut tape: BfTape<u8> = BfTape::new(
+            &program,
+            100,
+            cli::AllocStrategy::TapeIsFixed,
+            cli::OutputFormat::BinaryOutput,
+        );
+        tape.reset_data_pointer();
+        tape.set_data_value(55);
+
+        assert_eq!(tape.get_data_value(), 55);
     }
 
     /// Test that the value in a cell is incremented. Also checks that data value can be read.
