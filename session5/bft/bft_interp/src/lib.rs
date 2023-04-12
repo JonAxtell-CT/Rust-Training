@@ -40,11 +40,8 @@ pub enum BfError {
         program_pointer: usize,
     },
     /// Error to indicate a problem with the brackets when jumping forward or back
-    #[error("Error: Issue with brackets at {} {}", program_pointer, instruction)]
-    BracketNotFound {
-        instruction: bft_types::BfInstruction,
-        program_pointer: usize,
-    },
+    #[error("Error: Issue with brackets at {}", program_pointer)]
+    BracketNotFound { program_pointer: usize },
     /// Error the occurs when reading/writing using the input/output functionality of the tape
     #[error(
         "Error: I/O error {} at {} {} {}",
@@ -332,6 +329,100 @@ impl<'a, T: CellKind + std::clone::Clone + std::default::Default + std::fmt::Deb
         Ok(())
     }
 
+    /// Jump forward to the matching bracket if the value at the current data pointer is zero
+    // TODO: Uses a brute force method of finding the matching brackets. Have found a crate
+    // that can help called BiMap which should make the matching up easier.
+    pub fn jump_forward(&mut self) -> Result<(), BfError> {
+        if self.get_data_value() == 0 {
+            // Condition satisfied for jump forward, find the matching bracket
+            let mut found = false;
+            if self.debug() >= cli::DebugLevelType::Verbose {
+                println!(
+                    "Looking for jump loc at {}",
+                    self.current_instruction().location()
+                );
+            }
+            for jmp in self.program.jump_locations() {
+                if jmp.forward().line() == self.current_instruction().location().line()
+                    && jmp.forward().offset() == self.current_instruction().location().offset()
+                {
+                    // Matching bracket found, now find it's place in the program
+                    // by checking the line and char offset as the program vector
+                    // does not link 1-to-1 with the source file.
+                    for (i, ins) in self.program.instructions().iter().enumerate() {
+                        if ins.location().line() == jmp.backward().line()
+                            && ins.location().offset() == jmp.backward().offset()
+                        {
+                            if self.debug() >= cli::DebugLevelType::Verbose {
+                                println!("Jumping to {} at {}", i, ins.location());
+                            }
+                            self.program_pointer = i; // +1 is added after every instruction
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if found {
+                    break;
+                }
+            }
+            if !found {
+                // Should never happen since unpaired brackets are checked for before program is run
+                return Err(BfError::BracketNotFound {
+                    program_pointer: self.program_pointer,
+                });
+            }
+        };
+        Ok(())
+    }
+
+    /// Jump backward to the matching bracket if the value at the current data pointer is non-zero
+    // TODO: Uses a brute force method of finding the matching brackets. Have found a crate
+    // that can help called BiMap which should make the matching up easier.
+    pub fn jump_backward(&mut self) -> Result<(), BfError> {
+        if self.get_data_value() != 0 {
+            // Condition satisfied for jump back, find the matching bracket
+            let mut found = false;
+            if self.debug() >= cli::DebugLevelType::Verbose {
+                println!(
+                    "Looking for jump loc at {}",
+                    self.current_instruction().location()
+                );
+            }
+            for jmp in self.program.jump_locations() {
+                if jmp.backward().line() == self.current_instruction().location().line()
+                    && jmp.backward().offset() == self.current_instruction().location().offset()
+                {
+                    // Matching bracket found, now find it's place in the program
+                    // by checking the line and char offset as the program vector
+                    // does not link 1-to-1 with the source file.
+                    for (i, ins) in self.program.instructions().iter().enumerate() {
+                        if ins.location().line() == jmp.forward().line()
+                            && ins.location().offset() == jmp.forward().offset()
+                        {
+                            if self.debug() >= cli::DebugLevelType::Verbose {
+                                println!("Jumping to {} at {}", i, ins.location());
+                            }
+                            self.program_pointer = i; // +1 is added after every instruction
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if found {
+                    break;
+                }
+            }
+            if !found {
+                // Should never happen since unpaired brackets are checked for before program is run
+                return Err(BfError::BracketNotFound {
+                    program_pointer: self.program_pointer,
+                });
+            }
+        };
+        Ok(())
+    }
+
     // Debug handling methods
     // ######################
 
@@ -412,93 +503,13 @@ impl<'a, T: std::fmt::Debug + CellKind + std::clone::Clone + std::default::Defau
                     if self.debug() != cli::DebugLevelType::None {
                         println!("Jumping forward at {}", self.program_pointer());
                     }
-                    if self.get_data_value() == 0 {
-                        // Condition satisfied for jump forward, find the matching bracket
-                        let mut found = false;
-                        if self.debug() >= cli::DebugLevelType::Verbose {
-                            println!(
-                                "Looking for jump loc at {}",
-                                self.current_instruction().location()
-                            );
-                        }
-                        for jmp in self.program.jump_locations() {
-                            if jmp.forward().line() == self.current_instruction().location().line()
-                                && jmp.forward().offset()
-                                    == self.current_instruction().location().offset()
-                            {
-                                // Matching bracket found, now find it's place in the program
-                                // by checking the line and char offset as the program vector
-                                // does not link 1-to-1 with the source file.
-                                for (i, ins) in self.program.instructions().iter().enumerate() {
-                                    if ins.location().line() == jmp.backward().line()
-                                        && ins.location().offset() == jmp.backward().offset()
-                                    {
-                                        if self.debug() >= cli::DebugLevelType::Verbose {
-                                            println!("Jumping to {} at {}", i, ins.location());
-                                        }
-                                        self.program_pointer = i; // +1 is added after every instruction
-                                        found = true;
-                                        break;
-                                    }
-                                }
-                            }
-                            if found {
-                                break;
-                            }
-                        }
-                        if !found {
-                            return Err(BfError::BracketNotFound {
-                                instruction: inst,
-                                program_pointer: self.program_pointer,
-                            });
-                        }
-                    };
+                    self.jump_forward()?;
                 }
                 bft_types::BfCommand::JumpBackward => {
                     if self.debug() != cli::DebugLevelType::None {
                         println!("Jumping backward at {}", self.program_pointer());
                     }
-                    if self.get_data_value() != 0 {
-                        // Condition satisfied for jump back, find the matching bracket
-                        let mut found = false;
-                        if self.debug() >= cli::DebugLevelType::Verbose {
-                            println!(
-                                "Looking for jump loc at {}",
-                                self.current_instruction().location()
-                            );
-                        }
-                        for jmp in self.program.jump_locations() {
-                            if jmp.backward().line() == self.current_instruction().location().line()
-                                && jmp.backward().offset()
-                                    == self.current_instruction().location().offset()
-                            {
-                                // Matching bracket found, now find it's place in the program
-                                // by checking the line and char offset as the program vector
-                                // does not link 1-to-1 with the source file.
-                                for (i, ins) in self.program.instructions().iter().enumerate() {
-                                    if ins.location().line() == jmp.forward().line()
-                                        && ins.location().offset() == jmp.forward().offset()
-                                    {
-                                        if self.debug() >= cli::DebugLevelType::Verbose {
-                                            println!("Jumping to {} at {}", i, ins.location());
-                                        }
-                                        self.program_pointer = i; // +1 is added after every instruction
-                                        found = true;
-                                        break;
-                                    }
-                                }
-                            }
-                            if found {
-                                break;
-                            }
-                        }
-                        if !found {
-                            return Err(BfError::BracketNotFound {
-                                instruction: inst,
-                                program_pointer: self.program_pointer,
-                            });
-                        }
-                    };
+                    self.jump_backward()?;
                 }
             };
 
