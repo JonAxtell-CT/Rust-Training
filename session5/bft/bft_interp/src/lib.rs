@@ -313,8 +313,8 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
     }
 
     /// The instruction at the current program pointer
-    pub fn current_instruction(&self) -> &bft_types::BfInstruction {
-        &self.program.instructions()[self.program_pointer]
+    pub fn current_instruction(&self) -> bft_types::BfInstruction {
+        self.program.instructions()[self.program_pointer]
     }
 
     /// Moves the program pointer forward
