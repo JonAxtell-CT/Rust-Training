@@ -122,6 +122,8 @@ pub struct BfTape<'a, T> {
     output_format: cli::OutputFormat,
     /// The tape itself
     tape: Vec<T>,
+    /// Newline flag
+    newline: bool,
     /// Debug flag
     debug: cli::DebugLevelType,
 }
@@ -153,6 +155,7 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
             } else {
                 vec![Default::default(); tape_size]
             },
+            newline: false,
             debug: cli::DebugLevelType::None,
         }
     }
@@ -176,7 +179,7 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
     }
 
     /// Moves the data pointer forward
-    fn move_data_pointer_forward(&mut self) -> Result<(), BfError> {
+    pub fn move_data_pointer_forward(&mut self) -> Result<(), BfError> {
         if self.data_pointer == self.tape.len() - 1 {
             // The data pointer is at the end of the tape, we can either abort the BF program
             // or extend the tape.
@@ -198,7 +201,7 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
     }
 
     /// Moves the data pointer backward
-    fn move_data_pointer_back(&mut self) -> Result<(), BfError> {
+    pub fn move_data_pointer_back(&mut self) -> Result<(), BfError> {
         if self.data_pointer == 0 {
             return Err(BfError::DataPtrMovedBeforeStart {
                 program_pointer: self.program_pointer,
@@ -213,23 +216,25 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
     // ###########################
 
     /// Increment the value of the cell currently pointed to by the data pointer
-    fn increment_data_value(&mut self) -> Result<(), BfError> {
+    pub fn increment_data_value(&mut self) -> Result<(), BfError> {
         self.tape[self.data_pointer] = self.tape[self.data_pointer].inc();
         Ok(())
     }
 
     /// Decrement the value of the cell currently pointed to by the data pointer
-    fn decrement_data_value(&mut self) -> Result<(), BfError> {
+    pub fn decrement_data_value(&mut self) -> Result<(), BfError> {
         self.tape[self.data_pointer] = self.tape[self.data_pointer].dec();
         Ok(())
     }
 
     /// Get the current value of the cell at the current data pointer position
+    // Note: Used for tests
     pub fn get_data_value(&self) -> u8 {
         self.tape[self.data_pointer].to_u8()
     }
 
     /// Set the current value of the cell at the current data pointer position
+    // Note: Used for tests
     pub fn set_data_value(&mut self, value: u8) {
         self.tape[self.data_pointer] = <T as CellKind>::from_u8(value);
     }
@@ -242,12 +247,14 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
     ///     let mut tape: bft_interp::BfTape<u8> =
     ///                         bft_interp::BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed, cli::OutputFormat::BinaryOutput);
     ///     let mut writer = std::io::Cursor::new(Vec::new());
-    ///     assert_eq!(tape.output_value(&mut writer).is_ok(), true);
+    ///     assert_eq!(tape.command_output_value(&mut writer).is_ok(), true);
     ///     assert_eq!(writer.into_inner()[0], 48);
     /// ```
     pub fn output_value<W: Write>(&mut self, writer: &mut W) -> Result<(), BfError> {
         // Get the value of the cell in the tape at the current data pointer location
         let data = [self.tape[self.data_pointer].to_u8(); 1];
+
+        self.newline = false;
 
         // Write to where ever it's going, handling any i/o errors.
         // Also
@@ -267,6 +274,9 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
                 instruction: self.program.instructions()[self.program_pointer],
                 program_pointer: self.program_pointer,
             })?;
+            if data[0] == 0x0a {
+                self.newline = true;
+            }
         }
 
         if self.debug() >= cli::DebugLevelType::Verbose {
@@ -280,12 +290,11 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
     ///
     /// Example usage:
     /// ```
-    ///     let program = bft_types::BfProgram::new(&"tiny.bf", "><+-.").unwrap();
+    ///     let program = bft_types::BfProgram::new(&"inout.bf", ",.").unwrap();
     ///     let mut tape: bft_interp::BfTape<u8> =
     ///                             bft_interp::BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed, cli::OutputFormat::BinaryOutput);
     ///     let mut reader = std::io::Cursor::new(vec![55]);
-    ///     assert_eq!(tape.input_value(&mut reader).is_ok(), true);
-    ///     assert_eq!(tape.get_data_value(), 55);
+    ///     assert!(tape.command_input_value(&mut reader).is_ok());
     /// ```
     pub fn input_value<R: Read>(&mut self, reader: &mut R) -> Result<(), BfError> {
         // Provide a place to put the byte read in. Only one character at a time is read
@@ -304,7 +313,7 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
         }
 
         if n == 0 {
-            // End of file, use special value of 0 which is how rot13.bf program knows when to terminate
+            // End of file, use special value of -1 which is how rot13.bf program knows when to terminate
             self.tape[self.data_pointer] = T::from_u8(u8::MAX);
         } else {
             // Place the byte into the tape at the current data pointer location
@@ -317,16 +326,17 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
     // ########################
 
     /// Current program pointer
-    fn program_pointer(&self) -> usize {
+    pub fn program_pointer(&self) -> usize {
         self.program_pointer
     }
 
     /// The instruction at the current program pointer
-    fn current_instruction(&self) -> bft_types::BfInstruction {
+    pub fn current_instruction(&self) -> bft_types::BfInstruction {
         self.program.instructions()[self.program_pointer]
     }
 
     /// Moves the program pointer forward
+    // Note: Used for tests
     pub fn move_program_pointer_forward(&mut self) -> Result<(), BfError> {
         if self.program_pointer == self.program.instructions().len() - 1 {
             return Err(BfError::ProgramPtrMovedAfterEnd {
@@ -341,7 +351,7 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
     /// Jump forward to the matching bracket if the value at the current data pointer is zero
     // TODO: Uses a brute force method of finding the matching brackets. Have found a crate
     // that can help called BiMap which should make the matching up easier.
-    fn jump_forward(&mut self) -> Result<(), BfError> {
+    pub fn jump_forward(&mut self) -> Result<(), BfError> {
         if self.get_data_value() == 0 {
             // Condition satisfied for jump forward, find the matching bracket
             let mut found = false;
@@ -388,7 +398,7 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
     /// Jump backward to the matching bracket if the value at the current data pointer is non-zero
     // TODO: Uses a brute force method of finding the matching brackets. Have found a crate
     // that can help called BiMap which should make the matching up easier.
-    fn jump_backward(&mut self) -> Result<(), BfError> {
+    pub fn jump_backward(&mut self) -> Result<(), BfError> {
         if self.get_data_value() != 0 {
             // Condition satisfied for jump back, find the matching bracket
             let mut found = false;
@@ -432,6 +442,90 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
         Ok(())
     }
 
+    // BF Command implementation methods
+    // #################################
+
+    /// Increment the value in the data cell currently pointed to by the data pointer
+    /// The return value is the updated program pointer
+    pub fn command_inc_value(&mut self) -> Result<usize, BfError> {
+        if self.debug() != cli::DebugLevelType::None {
+            println!("Inc at {}", self.program_pointer());
+        }
+        self.increment_data_value()?;
+        self.program_pointer += 1;
+        Ok(self.program_pointer)
+    }
+
+    /// Decrement the value in the data cell currently pointed to by the data pointer
+    pub fn command_dec_value(&mut self) -> Result<usize, BfError> {
+        if self.debug() != cli::DebugLevelType::None {
+            println!("Dec at {}", self.program_pointer());
+        }
+        self.decrement_data_value()?;
+        self.program_pointer += 1;
+        Ok(self.program_pointer)
+    }
+
+    /// Move data pointer forward to next data cell in tape
+    pub fn command_move_pointer_forward(&mut self) -> Result<usize, BfError> {
+        if self.debug() != cli::DebugLevelType::None {
+            println!("IncPtr at {}", self.program_pointer());
+        }
+        self.move_data_pointer_forward()?;
+        self.program_pointer += 1;
+        Ok(self.program_pointer)
+    }
+
+    /// Move data pointer back to previous data cell in tape
+    pub fn command_move_pointer_back(&mut self) -> Result<usize, BfError> {
+        if self.debug() != cli::DebugLevelType::None {
+            println!("DecPtr at {}", self.program_pointer());
+        }
+        self.move_data_pointer_back()?;
+        self.program_pointer += 1;
+        Ok(self.program_pointer)
+    }
+
+    /// Take input from user and place into the current data cell
+    pub fn command_input_value<R: Read>(&mut self, reader: &mut R) -> Result<usize, BfError> {
+        if self.debug() != cli::DebugLevelType::None {
+            println!("Input at {}", self.program_pointer());
+        }
+        self.input_value(reader)?;
+        self.program_pointer += 1;
+        Ok(self.program_pointer)
+    }
+
+    /// Take input from user and place into the current data cell
+    pub fn command_output_value<W: Write>(&mut self, writer: &mut W) -> Result<usize, BfError> {
+        if self.debug() != cli::DebugLevelType::None {
+            println!("Output at {}", self.program_pointer());
+        }
+        self.output_value(writer)?;
+        self.program_pointer += 1;
+        Ok(self.program_pointer)
+    }
+
+    /// Jump forward if the value in the current data cell is zero
+    pub fn command_jump_forward(&mut self) -> Result<usize, BfError> {
+        if self.debug() != cli::DebugLevelType::None {
+            println!("Jumping forward at {}", self.program_pointer());
+        }
+        self.jump_forward()?;
+        self.program_pointer += 1;
+        Ok(self.program_pointer)
+    }
+
+    /// Jump back if the value in the current data cell is not zero
+    pub fn command_jump_backward(&mut self) -> Result<usize, BfError> {
+        if self.debug() != cli::DebugLevelType::None {
+            println!("Jumping backward at {}", self.program_pointer());
+        }
+        self.jump_backward()?;
+        self.program_pointer += 1;
+        Ok(self.program_pointer)
+    }
+
     // Debug handling methods
     // ######################
 
@@ -449,7 +543,22 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
 /// Implementation of the BF program's tape
 ///
 impl<'a, T: std::fmt::Debug + CellKind + std::clone::Clone + std::default::Default> BfTape<'a, T> {
-    /// The basis of an interpreter for the program
+    /// The interpreter of a Brain Fuck program.
+    ///
+    /// When input or output is required, the standard in/out objects should be used.
+    ///
+    /// The return is a Result which if empty when OK, but will contain an error types if there was a problem.
+    ///
+    /// Example usage:
+    /// ```
+    ///     let program = bft_types::BfProgram::new(&"tiny.bf", ",+.").unwrap();
+    ///     let mut tape: bft_interp::BfTape<u8> =
+    ///                             bft_interp::BfTape::new(&program, 100, cli::AllocStrategy::TapeIsFixed, cli::OutputFormat::BinaryOutput);
+    ///     match tape.interpreter(&mut std::io::stdin(), &mut std::io::stdout()) {
+    ///         Ok(_) => {}
+    ///         Err(e) => println!("Error {}", e),
+    ///     }
+    /// ```
 
     // Note: The tape "object" handles the program's execution, not the program "object" which
     // is just a static representation of the program. Sounds like there should be another
@@ -470,62 +579,22 @@ impl<'a, T: std::fmt::Debug + CellKind + std::clone::Clone + std::default::Defau
         while self.program_pointer != self.program.instructions().len() {
             let inst = self.program.instructions()[self.program_pointer];
             let cmd = inst.command();
-            match cmd {
-                bft_types::BfCommand::Comment => {}
-                bft_types::BfCommand::IncDataPointer => {
-                    if self.debug() != cli::DebugLevelType::None {
-                        println!("IncPtr at {}", self.program_pointer());
-                    }
-                    self.move_data_pointer_forward()?;
-                }
-                bft_types::BfCommand::DecDataPointer => {
-                    if self.debug() != cli::DebugLevelType::None {
-                        println!("DecPtr at {}", self.program_pointer());
-                    }
-                    self.move_data_pointer_back()?;
-                }
-                bft_types::BfCommand::IncValue => {
-                    if self.debug() != cli::DebugLevelType::None {
-                        println!("Inc at {}", self.program_pointer());
-                    }
-                    self.increment_data_value()?;
-                }
-                bft_types::BfCommand::DecValue => {
-                    if self.debug() != cli::DebugLevelType::None {
-                        println!("Dec at {}", self.program_pointer());
-                    }
-                    self.decrement_data_value()?;
-                }
-                bft_types::BfCommand::OutputValue => {
-                    if self.debug() != cli::DebugLevelType::None {
-                        println!("Output at {}", self.program_pointer());
-                    }
-                    self.output_value(writer)?;
-                }
-                bft_types::BfCommand::InputValue => {
-                    if self.debug() != cli::DebugLevelType::None {
-                        println!("Input at {}", self.program_pointer());
-                    }
-                    self.input_value(reader)?;
-                }
-                bft_types::BfCommand::JumpForward => {
-                    if self.debug() != cli::DebugLevelType::None {
-                        println!("Jumping forward at {}", self.program_pointer());
-                    }
-                    self.jump_forward()?;
-                }
-                bft_types::BfCommand::JumpBackward => {
-                    if self.debug() != cli::DebugLevelType::None {
-                        println!("Jumping backward at {}", self.program_pointer());
-                    }
-                    self.jump_backward()?;
-                }
+            self.program_pointer = match cmd {
+                bft_types::BfCommand::Comment => todo!(), // Do nothing
+                bft_types::BfCommand::IncDataPointer => self.command_move_pointer_forward()?,
+                bft_types::BfCommand::DecDataPointer => self.command_move_pointer_back()?,
+                bft_types::BfCommand::IncValue => self.command_inc_value()?,
+                bft_types::BfCommand::DecValue => self.command_dec_value()?,
+                bft_types::BfCommand::OutputValue => self.command_output_value(writer)?,
+                bft_types::BfCommand::InputValue => self.command_input_value(reader)?,
+                bft_types::BfCommand::JumpForward => self.command_jump_forward()?,
+                bft_types::BfCommand::JumpBackward => self.command_jump_backward()?,
             };
-
-            // Update program pointer, even after jumps
-            self.program_pointer += 1;
         }
-        println!(); // To ensure that shell prompt is on new line if no debug used and values were output
+
+        // if !self.newline {
+        //     println!(); // To ensure that shell prompt is on new line if no debug used and values were output
+        // }
         Ok(())
     }
 }
