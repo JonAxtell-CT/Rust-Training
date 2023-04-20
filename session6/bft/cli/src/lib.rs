@@ -123,28 +123,38 @@ impl Args {
             )
             .get_matches();
 
+        let debug = matches.get_count("debug");
+        if <u8 as Into<DebugLevelType>>::into(debug) > DebugLevelType::Information {
+            println!("Debug is {:?}", debug);
+        }
+
         let program_name = matches.get_one::<String>("program").unwrap();
-        println!("program is {:?}", program_name);
+        if <u8 as Into<DebugLevelType>>::into(debug) > DebugLevelType::Information {
+            println!("program is {:?}", program_name);
+        }
 
         let cells = matches.get_one::<u32>("cells").unwrap();
-        println!("Cells is {:?}", cells);
+        if <u8 as Into<DebugLevelType>>::into(debug) > DebugLevelType::Information {
+            println!("Cells is {:?}", cells);
+        }
 
         let extensible = if *matches.get_one::<bool>("extensible").unwrap() {
             AllocStrategy::TapeCanGrow
         } else {
             AllocStrategy::TapeIsFixed
         };
-        println!("Extensible is {:?}", extensible);
+        if <u8 as Into<DebugLevelType>>::into(debug) > DebugLevelType::Information {
+            println!("Extensible is {:?}", extensible);
+        }
 
         let output_format = if *matches.get_one::<bool>("ascii").unwrap() {
             OutputFormat::AsciiOutput
         } else {
             OutputFormat::BinaryOutput
         };
-        println!("Output format is {:?}", output_format);
-
-        let debug = matches.get_count("debug");
-        println!("Debug is {:?}", debug);
+        if <u8 as Into<DebugLevelType>>::into(debug) > DebugLevelType::Information {
+            println!("Output format is {:?}", output_format);
+        }
 
         Args {
             program: program_name.into(),

@@ -8,7 +8,6 @@ fn run_bft(args: &cli::Args) -> Result<(), Box<dyn std::error::Error>> {
     // Debug code to dump BF program.
     if args.debug() > cli::DebugLevelType::Verbose {
         for inst in program.instructions() {
-            // println!("{:?}", inst);
             println!(
                 "[{}]: {} {}",
                 program.filename().to_string_lossy(),
@@ -26,8 +25,8 @@ fn run_bft(args: &cli::Args) -> Result<(), Box<dyn std::error::Error>> {
         Ok(()) => {
             if args.debug() > cli::DebugLevelType::Information {
                 println!("Jumps");
-                for j in program.jump_locations() {
-                    println!("{}", j);
+                for l in program.location_map() {
+                    println!("{:?}", l);
                 }
             }
             println!("Valid BF program, will now run it....");

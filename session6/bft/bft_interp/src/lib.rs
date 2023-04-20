@@ -257,7 +257,7 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
         self.newline = false;
 
         // Write to where ever it's going, handling any i/o errors.
-        // Also
+        // Also output each cell as a number or as an ASCII character depending on the state of the format flag
         if self.output_format == OutputFormat::BinaryOutput {
             let mut num = data[0].to_string();
             num += ",";
@@ -274,6 +274,8 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
                 instruction: self.program.instructions()[self.program_pointer],
                 program_pointer: self.program_pointer,
             })?;
+
+            // When outputting ASCII check if a newline is being output to ensure a blank line is output on completion of the program
             if data[0] == 0x0a {
                 self.newline = true;
             }
@@ -354,42 +356,40 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
     pub fn jump_forward(&mut self) -> Result<(), BfError> {
         if self.get_data_value() == 0 {
             // Condition satisfied for jump forward, find the matching bracket
-            let mut found = false;
             if self.debug() >= cli::DebugLevelType::Verbose {
                 println!(
                     "Looking for jump loc at {}",
                     self.current_instruction().location()
                 );
             }
-            for jmp in self.program.jump_locations() {
-                if jmp.forward().line() == self.current_instruction().location().line()
-                    && jmp.forward().offset() == self.current_instruction().location().offset()
-                {
+
+            match self
+                .program
+                .location_map()
+                .get_by_left(&self.current_instruction().location())
+            {
+                None => {
+                    // Should never happen since unpaired brackets are checked for before program is run
+                    return Err(BfError::BracketNotFound {
+                        program_pointer: self.program_pointer,
+                    });
+                }
+                Some(l) => {
                     // Matching bracket found, now find it's place in the program
                     // by checking the line and char offset as the program vector
                     // does not link 1-to-1 with the source file.
                     for (i, ins) in self.program.instructions().iter().enumerate() {
-                        if ins.location().line() == jmp.backward().line()
-                            && ins.location().offset() == jmp.backward().offset()
+                        if ins.location().line() == l.line()
+                            && ins.location().offset() == l.offset()
                         {
                             if self.debug() >= cli::DebugLevelType::Verbose {
                                 println!("Jumping to {} at {}", i, ins.location());
                             }
                             self.program_pointer = i; // +1 is added after every instruction
-                            found = true;
                             break;
                         }
                     }
                 }
-                if found {
-                    break;
-                }
-            }
-            if !found {
-                // Should never happen since unpaired brackets are checked for before program is run
-                return Err(BfError::BracketNotFound {
-                    program_pointer: self.program_pointer,
-                });
             }
         };
         Ok(())
@@ -401,42 +401,40 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
     pub fn jump_backward(&mut self) -> Result<(), BfError> {
         if self.get_data_value() != 0 {
             // Condition satisfied for jump back, find the matching bracket
-            let mut found = false;
             if self.debug() >= cli::DebugLevelType::Verbose {
                 println!(
                     "Looking for jump loc at {}",
                     self.current_instruction().location()
                 );
             }
-            for jmp in self.program.jump_locations() {
-                if jmp.backward().line() == self.current_instruction().location().line()
-                    && jmp.backward().offset() == self.current_instruction().location().offset()
-                {
+
+            match self
+                .program
+                .location_map()
+                .get_by_right(&self.current_instruction().location())
+            {
+                None => {
+                    // Should never happen since unpaired brackets are checked for before program is run
+                    return Err(BfError::BracketNotFound {
+                        program_pointer: self.program_pointer,
+                    });
+                }
+                Some(l) => {
                     // Matching bracket found, now find it's place in the program
                     // by checking the line and char offset as the program vector
                     // does not link 1-to-1 with the source file.
                     for (i, ins) in self.program.instructions().iter().enumerate() {
-                        if ins.location().line() == jmp.forward().line()
-                            && ins.location().offset() == jmp.forward().offset()
+                        if ins.location().line() == l.line()
+                            && ins.location().offset() == l.offset()
                         {
                             if self.debug() >= cli::DebugLevelType::Verbose {
                                 println!("Jumping to {} at {}", i, ins.location());
                             }
                             self.program_pointer = i; // +1 is added after every instruction
-                            found = true;
                             break;
                         }
                     }
                 }
-                if found {
-                    break;
-                }
-            }
-            if !found {
-                // Should never happen since unpaired brackets are checked for before program is run
-                return Err(BfError::BracketNotFound {
-                    program_pointer: self.program_pointer,
-                });
             }
         };
         Ok(())
@@ -592,9 +590,9 @@ impl<'a, T: std::fmt::Debug + CellKind + std::clone::Clone + std::default::Defau
             };
         }
 
-        // if !self.newline {
-        //     println!(); // To ensure that shell prompt is on new line if no debug used and values were output
-        // }
+        if !self.newline {
+            println!(); // To ensure that shell prompt is on new line if no debug used and values were output
+        }
         Ok(())
     }
 }

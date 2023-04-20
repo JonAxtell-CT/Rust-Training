@@ -11,3 +11,4 @@ cli = { version = "0.1.0", path = "../cli" }
 anyhow = "1.0.70"
 thiserror = "1.0.40"
 num-traits = "0.2.15"
+bimap = "0.6.3"

@@ -16,3 +16,4 @@ clap = { version = "4.1.11", features = ["derive", "cargo"] }
 anyhow = "1.0.70"
 thiserror = "1.0.40"
 num-traits = "0.2.15"
+bimap = "0.6.3"

@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use bimap::BiMap;
 use std::fmt;
 use std::fmt::Debug;
 use std::fs;
@@ -82,7 +83,7 @@ impl fmt::Display for BfCommand {
 /// Location of a command in a BF program.
 /// The point in the source file is comprised of the line number and the offset
 /// within the line.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct BfLocation {
     /// The line number in the source
     line: usize,
@@ -166,34 +167,20 @@ impl fmt::Display for BfInstruction {
 /// Jumps require matching up the start and end locations.
 /// This structure is records the position of the jump forward and the
 /// matching jump back.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct BfJumpLocation {
-    // Nesting depth of jumps (not used yet, maybe never
-    #[allow(unused)]
-    depth: usize,
-
-    // Location of jump forward in the pair of jumps
+    /// Location of jump forward in the pair of jumps
     forward: BfLocation,
 
-    // Location of jump back in the pair of jumps
+    /// Location of jump back in the pair of jumps
     backward: BfLocation,
 }
 
 // Implementations for BfJumpLocation
 impl BfJumpLocation {
     /// Create a new BF jump location.
-    pub fn new(depth: usize, forward: BfLocation, backward: BfLocation) -> Self {
-        Self {
-            depth,
-            forward,
-            backward,
-        }
-    }
-
-    /// Nesting depth for the pair of jumps
-    // TODO: Not sure if it will be useful.
-    pub fn depth(&self) -> usize {
-        self.depth
+    pub fn new(forward: BfLocation, backward: BfLocation) -> Self {
+        Self { forward, backward }
     }
 
     /// The location of the jump forward
@@ -212,8 +199,9 @@ impl fmt::Display for BfJumpLocation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Forward: {} Back: {} Depth: {}",
-            self.forward, self.backward, self.depth
+            "Forward: {} Back: {}", //Depth: {}",
+            self.forward,
+            self.backward //, self.depth
         )
     }
 }
@@ -241,7 +229,7 @@ pub struct BfProgram {
     /// The instructions parsed from the file
     instructions: Vec<BfInstruction>,
     /// Locations of matching jumps
-    jump_locations: Vec<BfJumpLocation>,
+    location_map: BiMap<BfLocation, BfLocation>,
 }
 
 // Implementations for BfProgram
@@ -257,8 +245,8 @@ impl BfProgram {
     }
 
     /// The program's jumps
-    pub fn jump_locations(&self) -> &Vec<BfJumpLocation> {
-        &self.jump_locations
+    pub fn location_map(&self) -> &BiMap<BfLocation, BfLocation> {
+        &self.location_map
     }
 
     /// Size of program
@@ -299,7 +287,7 @@ impl BfProgram {
         let program = Self {
             filename: filename.as_ref().to_path_buf(),
             instructions,
-            jump_locations: Vec::new(),
+            location_map: BiMap::new(),
         };
         Ok(program)
     }
@@ -343,6 +331,8 @@ impl BfProgram {
     pub fn validate(&mut self) -> Result<(), anyhow::Error> {
         println!("Validating...");
 
+        // let mut bimap = BiMap::new();
+
         // Use a stack to keep track of pairs of jumps. The [ and ] in the BF code.
         // Jump forwards (the [) are pushed on to the stack. When a jump backward is
         // found, the top item on the stack is removed which will be the matching jump
@@ -362,11 +352,7 @@ impl BfProgram {
 
                 // Make a note of the locations of the two jumps in the pair
                 let last_jump = stack.pop().unwrap();
-                self.jump_locations.push(BfJumpLocation {
-                    depth: stack.len(),
-                    forward: last_jump.location,
-                    backward: i.location,
-                });
+                self.location_map.insert(last_jump.location, i.location);
             }
         }
 
@@ -533,10 +519,13 @@ mod tests {
     fn validate_good_jumps() {
         let mut program = BfProgram::new("good.bf", "><+-[.]").unwrap();
         assert!(program.validate().is_ok());
-        assert_eq!(program.jump_locations().len(), 1);
-        assert_eq!(program.jump_locations()[0].forward.line(), 1);
-        assert_eq!(program.jump_locations()[0].forward.offset(), 5);
-        assert_eq!(program.jump_locations()[0].backward.line(), 1);
-        assert_eq!(program.jump_locations()[0].backward.offset(), 7);
+        assert_eq!(program.location_map().len(), 1);
+        assert_eq!(
+            program
+                .location_map()
+                .get_by_left(&BfLocation { line: 1, offset: 5 })
+                .unwrap(),
+            &BfLocation { line: 1, offset: 7 }
+        );
     }
 }
