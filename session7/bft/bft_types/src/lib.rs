@@ -329,10 +329,6 @@ impl BfProgram {
     ///   }
     /// ```
     pub fn validate(&mut self) -> Result<(), anyhow::Error> {
-        println!("Validating...");
-
-        // let mut bimap = BiMap::new();
-
         // Use a stack to keep track of pairs of jumps. The [ and ] in the BF code.
         // Jump forwards (the [) are pushed on to the stack. When a jump backward is
         // found, the top item on the stack is removed which will be the matching jump

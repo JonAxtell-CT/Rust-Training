@@ -274,6 +274,12 @@ impl<'a, T: CellKind + std::fmt::Debug> BfTape<'a, T> {
                 instruction: self.program.instructions()[self.program_pointer],
                 program_pointer: self.program_pointer,
             })?;
+            std::io::stdout().flush().map_err(|e| BfError::IOError {
+                error_msg: e,
+                filepath: self.program.filename().to_path_buf(),
+                instruction: self.program.instructions()[self.program_pointer],
+                program_pointer: self.program_pointer,
+            })?;
 
             // When outputting ASCII check if a newline is being output to ensure a blank line is output on completion of the program
             if data[0] == 0x0a {

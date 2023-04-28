@@ -18,18 +18,23 @@ fn run_bft(args: &cli::Args) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Do some validation before running the BF program
+    if args.debug() >= cli::DebugLevelType::Information {
+        println!("Validating...");
+    }
     match program.validate() {
         Err(e) => {
             return Err(e.into());
         }
         Ok(()) => {
-            if args.debug() > cli::DebugLevelType::Information {
+            if args.debug() >= cli::DebugLevelType::Verbose {
                 println!("Jumps");
                 for l in program.location_map() {
                     println!("{:?}", l);
                 }
             }
-            println!("Valid BF program, will now run it....");
+            if args.debug() >= cli::DebugLevelType::Information {
+                println!("Valid BF program, will now run it....");
+            }
         }
     }
 

@@ -112,17 +112,18 @@ impl Args {
                     .required(false),
             )
             .arg(
-                arg!(numbers: -n --numbers "Output cell values as numbers rather than ASCII characters")
+                arg!(numbers: -n --numbers  "Output cell values as numbers rather than ASCII characters")
                     .default_value("false")
                     .required(false),
             )
             .arg(
-                arg!(debug: -d --debug "Debug. Multiple occurrences will increase verbosity")
+                arg!(-d --debug "Debug. Multiple occurrences will increase verbosity")
                     .required(false)
                     .action(clap::ArgAction::Count),
             )
             .get_matches();
 
+        // Check debug arg first since it's used for outputting other arg statuses
         let debug = matches.get_count("debug");
         if <u8 as Into<DebugLevelType>>::into(debug) > DebugLevelType::Information {
             println!("Debug is {:?}", debug);
@@ -148,9 +149,9 @@ impl Args {
         }
 
         let output_format = if *matches.get_one::<bool>("numbers").unwrap() {
-            OutputFormat::AsciiOutput
-        } else {
             OutputFormat::BinaryOutput
+        } else {
+            OutputFormat::AsciiOutput
         };
         if <u8 as Into<DebugLevelType>>::into(debug) > DebugLevelType::Information {
             println!("Output format is {:?}", output_format);
