@@ -11,4 +11,5 @@ jobs:
           node-version: '14'
       - run: rustup -V
       - run: rustc -V
-      - run: cargo run
+      - run: pwd
+      - run: ls -l
