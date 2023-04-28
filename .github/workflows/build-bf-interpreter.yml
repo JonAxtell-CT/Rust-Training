@@ -13,7 +13,7 @@ jobs:
       - run: rustc -V
       - run: pwd
       - run: ls -l
-      - run: cd session7/bft; cargo build
-      - run: cd session7/bft; cargo clippy
-      - run: cd session7/bft; cargo test
+      - run: cd session7/bft; cargo build --all
+      - run: cd session7/bft; cargo clippy --all
+      - run: cd session7/bft; cargo test --all
       - run: cd session7/bft; cargo run hello-world.bf
