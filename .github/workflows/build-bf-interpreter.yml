@@ -10,4 +10,6 @@ jobs:
         with:
           node-version: '14'
       - run: npm install -g bats
-      - run: bats check-tmp-dir.bats
+      - run: rustup -V
+      - run: rustc -V
+      - run: bats check-rust-avail.bats
