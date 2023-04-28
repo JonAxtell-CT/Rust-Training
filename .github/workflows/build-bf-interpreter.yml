@@ -13,5 +13,4 @@ jobs:
       - run: rustc -V
       - run: pwd
       - run: ls -l
-      - run: cd session6/bft
-      - run: cargo run
+      - run: cd session6/bft; cargo run
