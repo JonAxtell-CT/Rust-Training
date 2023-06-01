@@ -92,11 +92,21 @@ impl Default for Args {
     }
 }
 
+/// Various options can be specified. They are
+/// * -c \<cells\>  - Specify the number of cells in the BF program's tape. The default is 30,000.
+/// * -e          - Allows the tape to grow as necessary. If not specified the tape is fixed in size.
+/// * -a          - ASCII output. Use for hello-world.bf. Without this option, values are output as numbers.
+/// * -d          - Debug output. Multiple occurences of this option increase the amount of debug information that is output.
+/// * -h          - Help
+/// * -V          - Version
+///
+/// Usage:
+///     bft <filename.bf> \[options\]
 impl Args {
     /// Create a new instance of the arguments to the program
     pub fn new() -> Self {
         let matches = Command::new("bft")
-            .version("1.0")
+            .version("2.0")
             .author("J Axtell <jonaxtell@codethink.co.uk>")
             .about("Runs a BF program")
             .arg(arg!(<program> "Name of BF program").required(true))
@@ -117,7 +127,7 @@ impl Args {
                     .required(false),
             )
             .arg(
-                arg!(-d --debug "Debug. Multiple occurrences will increase verbosity")
+                arg!(-d --debug "Debug. Multiple occurrences will increase verbosity from information only, to verbose, to detailed")
                     .required(false)
                     .action(clap::ArgAction::Count),
             )
@@ -129,34 +139,39 @@ impl Args {
             println!("Debug is {:?}", debug);
         }
 
+        // Get name of BF program to run
         let program_name = matches.get_one::<String>("program").unwrap();
         if <u8 as Into<DebugLevelType>>::into(debug) > DebugLevelType::Information {
             println!("program is {:?}", program_name);
         }
 
+        // Number of cells to use if not the default of 30k
         let cells = matches.get_one::<u32>("cells").unwrap();
         if <u8 as Into<DebugLevelType>>::into(debug) > DebugLevelType::Information {
             println!("Cells is {:?}", cells);
         }
 
+        // Cells used can graw if necessary
         let extensible = if *matches.get_one::<bool>("extensible").unwrap() {
-            AllocStrategy::TapeCanGrow
-        } else {
-            AllocStrategy::TapeIsFixed
-        };
+                                            AllocStrategy::TapeCanGrow
+                                        } else {
+                                            AllocStrategy::TapeIsFixed
+                                        };
         if <u8 as Into<DebugLevelType>>::into(debug) > DebugLevelType::Information {
             println!("Extensible is {:?}", extensible);
         }
 
+        // How to output anything
         let output_format = if *matches.get_one::<bool>("numbers").unwrap() {
-            OutputFormat::BinaryOutput
-        } else {
-            OutputFormat::AsciiOutput
-        };
+                                               OutputFormat::BinaryOutput
+                                           } else {
+                                               OutputFormat::AsciiOutput
+                                           };
         if <u8 as Into<DebugLevelType>>::into(debug) > DebugLevelType::Information {
             println!("Output format is {:?}", output_format);
         }
 
+        // Return the argument structure
         Args {
             program: program_name.into(),
             cells: *cells as usize,

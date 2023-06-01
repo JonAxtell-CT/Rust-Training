@@ -1,7 +1,9 @@
-use std::io::{stdin, stdout};
-
 /// Program to read a Brain Fuck program and run it
 ///
+///
+use std::io::{stdin, stdout};
+
+/// Run a BF program
 fn run_bft(args: &cli::Args) -> Result<(), Box<dyn std::error::Error>> {
     let mut program = bft_types::BfProgram::from_file(args.program())?;
 
